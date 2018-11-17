@@ -1,0 +1,7 @@
+# Split up nets into individual bits
+splitnets -ports; opt
+
+# Map to a specific set of gates (NOT is always included)
+abc -g gates
+
+clean
