@@ -1,10 +1,13 @@
 YOSYS := yosys
 
-ifeq ($(REPO_ROOT),)
+ifndef REPO_ROOT
 $(error "REPO_ROOT is not set!")
 endif
+ifndef VERILOG_SRC_FILES
+$(error "VERILOG_SRC_FILES is not set!")
+endif
 
-%.synth.ilang: $(SRC_FILES)
+%.synth.ilang: $(VERILOG_SRC_FILES)
 	@echo "Building $(notdir $@)"
 	@$(YOSYS) -q -f verilog -b ilang -s $(REPO_ROOT)/utils/yosys/synth.ys -o $@ $^
 

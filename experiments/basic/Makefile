@@ -1,34 +1,46 @@
 REPO_ROOT := $(shell git rev-parse --show-toplevel)
 PROJECT_NAME := basic
 BUILD_DIR := build
-OBJ_DIR := $(BUILD_DIR)/obj
-OUT_DIR := $(BUILD_DIR)/out
 
-SRC_FILES := basic.sv
+VERILOG_SRC_FILES := basic.sv
+SIM_SRC_FILES := $(abspath sim_main.cpp)
+SIM_HEADER_FILES := $(abspath $(REPO_ROOT)/lib/verilator/core_wrapper.hpp)
 
-include $(REPO_ROOT)/utils/make/yosys.mk
+include $(REPO_ROOT)/utils/make/directories.mk
 include $(REPO_ROOT)/utils/make/dot.mk
+include $(REPO_ROOT)/utils/make/verilator.mk
+include $(REPO_ROOT)/utils/make/yosys.mk
 
-$(OUT_DIR)/$(PROJECT_NAME).png: $(OBJ_DIR)/$(PROJECT_NAME).gates.png
-	@echo "Copying to $(notdir $@)"
+GATES_PNG_OUT := $(OUT_DIR)/$(PROJECT_NAME).png
+GATES_JSON_OUT := $(OUT_DIR)/$(PROJECT_NAME).json
+SIM_EXE_OUT := $(OUT_DIR)/$(PROJECT_NAME).exe
+
+$(GATES_PNG_OUT): $(OBJ_DIR)/$(PROJECT_NAME).gates.png
+	@echo "Copying output $(notdir $@)"
 	@cp $< $@
 
-$(OUT_DIR)/$(PROJECT_NAME).json: $(OBJ_DIR)/$(PROJECT_NAME).gates.json
-	@echo "Copying to $(notdir $@)"
+gates_png: directories $(GATES_PNG_OUT)
+
+$(GATES_JSON_OUT): $(OBJ_DIR)/$(PROJECT_NAME).gates.json
+	@echo "Copying output $(notdir $@)"
 	@cp $< $@
 
-$(OBJ_DIR):
-	@mkdir -p $@
+gates_json: directories $(GATES_JSON_OUT)
 
-$(OUT_DIR):
-	@mkdir -p $@
+$(SIM_EXE_OUT): $(OBJ_DIR)/Vmodule.exe
+	@echo "Copying output $(notdir $@)"
+	@cp $< $@
 
-directories: $(OBJ_DIR) $(OUT_DIR)
+build_sim: directories $(SIM_EXE_OUT)
 
-all: directories $(OUT_DIR)/$(PROJECT_NAME).png $(OUT_DIR)/$(PROJECT_NAME).json
+run_sim: build_sim
+	@$(SIM_EXE_OUT)
+
+all: gates_png gates_json build_sim
 
 clean:
+	@echo "Removing build folder"
 	@rm -rf $(BUILD_DIR)
 
-.PHONY: directories all clean
+.PHONY: gates_png gates_json build_sim run_sim all clean
 .DEFAULT_GOAL := all
