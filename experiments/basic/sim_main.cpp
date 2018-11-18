@@ -8,15 +8,15 @@ int main(int argc, char** argv) {
 	Verilated::commandArgs(argc, argv);
 	CoreWrapper core;
 
-	core->i_a = 0x2;
-	core->i_b = 0x1;
+	core->a = 0x2;
+	core->b = 0x1;
 	core.tick();
-	printf("0x%x + 0x%x = 0x%x\n", core->i_a, core->i_b, core->o_result);
+	printf("0x%x + 0x%x = 0x%x\n", core->a, core->b, core->result);
 
-	core->i_a = 0x1;
-	core->i_b = 0x0;
+	core->a = 0x1;
+	core->b = 0x0;
 	core.tick();
-	printf("0x%x + 0x%x = 0x%x\n", core->i_a, core->i_b, core->o_result);
+	printf("0x%x + 0x%x = 0x%x\n", core->a, core->b, core->result);
 
 	return 0;
 }

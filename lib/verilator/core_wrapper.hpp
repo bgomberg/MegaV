@@ -3,7 +3,7 @@
 class CoreWrapper {
 public:
 	CoreWrapper() : core_(new Vmodule()) {
-		core_->i_clk = 0;
+		core_->clk = 0;
 		core_->eval();
 	}
 
@@ -17,9 +17,9 @@ public:
 	}
 
 	void tick() {
-		core_->i_clk = 1;
+		core_->clk = 1;
 		core_->eval();
-		core_->i_clk = 0;
+		core_->clk = 0;
 		core_->eval();
 	}
 
