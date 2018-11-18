@@ -36,11 +36,14 @@ build_sim: directories $(SIM_EXE_OUT)
 run_sim: build_sim
 	@$(SIM_EXE_OUT)
 
+sby:
+	@sby -d $(OBJ_DIR)/sby -f basic.sby
+
 all: gates_png gates_json build_sim
 
 clean:
 	@echo "Removing build folder"
 	@rm -rf $(BUILD_DIR)
 
-.PHONY: gates_png gates_json build_sim run_sim all clean
+.PHONY: gates_png gates_json build_sim run_sim sby all clean
 .DEFAULT_GOAL := all
