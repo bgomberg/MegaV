@@ -26,6 +26,8 @@ module register_file #(
     integer i;
     always @(posedge clk) begin
         if (reset) begin
+            read_data_a <= 0;
+            read_data_b <= 0;
             for (i = 0; i < NUM_REGS; i++) begin
                 registers[i] <= 0;
             end
@@ -39,7 +41,6 @@ module register_file #(
         end
     end
 
-    /* Formal properties */
 `ifdef FORMAL
     reg f_past_valid;
     initial f_past_valid = 0;
