@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 10
+
+[engines]
+smtbmc yices
+
+[script]
+read -formal register_file.sv
+prep -top register_file
+
+[files]
+register_file.sv
