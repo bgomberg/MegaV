@@ -37,7 +37,7 @@ run_sim: build_sim
 	@$(SIM_EXE_OUT)
 
 sby:
-	@sby -d $(OBJ_DIR)/sby -f basic.sby
+	@sby -d $(OBJ_DIR)/sby -f verify.sby
 
 all: gates_png gates_json build_sim
 
