@@ -1,5 +1,5 @@
 /*
- * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I instruction set.
+ * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I/E instruction set.
  */
 module alu #(
     parameter DATA_WIDTH = 32
@@ -87,7 +87,7 @@ module alu #(
         end
     end
 
-    /* TODO */
+    /* Validate logic */
     always @(posedge clk) begin
     	if (f_past_valid && !$past(reset)) begin
             case ($past(op))
