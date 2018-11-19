@@ -1,5 +1,5 @@
 /*
- * A 16x32 register file with r0 tied to 0 and two read ports and one write port.
+ * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I instruction set.
  */
 module alu #(
     parameter DATA_WIDTH = 32
