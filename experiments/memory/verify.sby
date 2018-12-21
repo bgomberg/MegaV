@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 10
+
+[engines]
+smtbmc yices
+
+[script]
+read -formal memory.sv
+prep -top memory
+
+[files]
+memory.sv
