@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 10
+
+[engines]
+smtbmc yices
+
+[script]
+read -formal program_counter.sv
+prep -top program_counter
+
+[files]
+program_counter.sv
