@@ -20,13 +20,12 @@ module program_counter #(
     /* Decoding and intermediate values */
     wire [31:0] pc_offset_sum = pc + {offset[31:2], 2'b00};
     wire [31:0] in_pc_value = {in[31:2], 2'b00};
-    wire in_cond = in[0];
     wire offset_is_invalid = offset[1] | offset[0];
     wire next_pc_is_invalid = next_pc[1] | next_pc[0];
     wire in_is_invalid = in[1];
-    wire op_is_next_pc = ~(op[0] ^ op[1]) & (~op[0] | ~in_cond);
+    wire op_is_next_pc = ~(op[0] ^ op[1]) & (~op[0] | ~in[0]);
     wire op_is_in = ~op[1] & op[0];
-    wire op_is_pc_offset_sum = op[1] & (~op[0] | in_cond);
+    wire op_is_pc_offset_sum = op[1] & (~op[0] | in[0]);
 
     /* Logic */
     assign next_pc = pc + 4;
