@@ -5,11 +5,10 @@ module program_counter #(
 )(
     input clk, // Clock signal
     input reset, // Reset signal
-    input [1:0] op, // Operation to perform (b00=npc, b01=in[31:1], b10=pc+offset, b11=in[0]?pc+offset:npc)
+    input [1:0] op, // Operation to perform (b01=in[31:1], b10=pc+offset, b11=in[0]?pc+offset:in[31:1])
     input [31:0] offset, // Offset to add to the PC (for op b10 and b11)
     input [31:0] in, // Input data
     output [31:0] pc, // Current PC
-    output [31:0] next_pc, // Next PC
     output fault // Fault condition
 );
 
@@ -18,32 +17,28 @@ module program_counter #(
     reg fault;
 
     /* Decoding and intermediate values */
-    wire [31:0] pc_offset_sum = pc + {offset[31:2], 2'b00};
     wire [31:0] in_pc_value = {in[31:2], 2'b00};
-    wire offset_is_invalid = offset[1] | offset[0];
-    wire next_pc_is_invalid = next_pc[1] | next_pc[0];
+    wire [31:0] pc_offset_sum = pc + {offset[31:2], 2'b00};
+    wire op_is_in = (op == 2'b01) | ((op == 2'b11) & ~in[0]);
+    wire op_is_pc_offset_sum = (op == 2'b10) | ((op == 2'b11) & in[0]);
     wire in_is_invalid = in[1];
-    wire op_is_next_pc = ~(op[0] ^ op[1]) & (~op[0] | ~in[0]);
-    wire op_is_in = ~op[1] & op[0];
-    wire op_is_pc_offset_sum = op[1] & (~op[0] | in[0]);
+    wire offset_is_invalid = offset[1] | offset[0];
 
     /* Logic */
-    assign next_pc = pc + 4;
     always @(posedge clk) begin
         if (reset) begin
             pc <= 0;
             fault <= 0;
-        end else if (op_is_next_pc) begin
-            fault <= next_pc_is_invalid;
-            pc <= next_pc;
-        end else if (op_is_in) begin
-            fault <= in_is_invalid;
-            pc <= in_pc_value;
-        end else if (op_is_pc_offset_sum) begin
-            fault <= offset_is_invalid;
-            pc <= pc_offset_sum;
         end else begin
-            fault <= 1;
+            if (op_is_in) begin
+                fault <= in_is_invalid;
+                pc <= in_pc_value;
+            end else if (op_is_pc_offset_sum) begin
+                fault <= offset_is_invalid;
+                pc <= pc_offset_sum;
+            end else begin
+                fault <= 1;
+            end
         end
     end
 
