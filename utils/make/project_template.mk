@@ -9,9 +9,6 @@ endif
 ifndef SIM_SRC_FILES
 $(error "SIM_SRC_FILES is not set!")
 endif
-ifndef SIM_HEADER_FILES
-$(error "SIM_HEADER_FILES is not set!")
-endif
 
 include $(REPO_ROOT)/utils/make/directories.mk
 include $(REPO_ROOT)/utils/make/dot.mk
