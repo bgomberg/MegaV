@@ -107,10 +107,10 @@ private:
 #define _J_TYPE(IMM, RD, OPCODE) \
 	((_BIT(IMM, 20) << 31) | (_BITS(IMM, 10, 1) << 21) | (_BIT(IMM, 11) << 20) | (_BITS(IMM, 19, 12) << 12) | (RD << 7) | (OPCODE))
 
-#define JAL(RD, OFFSET) _J_TYPE(OFFSET, RD, 0x6f)
-#define SW(RS2, RS1, OFFSET) _S_TYPE(OFFSET, RS2, RS1, 0x2, 0x23)
-#define LW(RD, RS1, OFFSET) _I_TYPE(OFFSET, RS1, 0x2, RD, 0x03)
-#define ADDI(RD, RS1, IMM) _I_TYPE(IMM, RS1, 0x0, RD, 0x13)
+#define JAL(RD, OFFSET) _J_TYPE(UINT32_C(OFFSET), RD, 0x6f)
+#define SW(RS2, RS1, OFFSET) _S_TYPE(UINT32_C(OFFSET), RS2, RS1, 0x2, 0x23)
+#define LW(RD, RS1, OFFSET) _I_TYPE(UINT32_C(OFFSET), RS1, 0x2, RD, 0x03)
+#define ADDI(RD, RS1, IMM) _I_TYPE(UINT32_C(IMM), RS1, 0x0, RD, 0x13)
 #define ADD(RD, RS1, RS2) _R_TYPE(0x00, RS2, RS1, 0x0, RD, 0x33)
 
 #define ARRAY_LENGTH(ARR) ((sizeof(ARR)) / (sizeof(*ARR)))
@@ -124,10 +124,10 @@ static const uint32_t TEST_PROGRAM[] = {
 	LW(4, 0, 0x80), // LW r4,r0,0x80
 	ADDI(5, 0, 0x100), // ADDI r5,r0,0x100
 	JAL(10, 8), // JAL r10,8
-	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
-	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
-	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
 	JAL(0, 0), // JAL r0,0
+	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
+	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
+	JAL(11, -12), // JAL r11,-12
 };
 
 

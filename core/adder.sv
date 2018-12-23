@@ -1,17 +1,18 @@
 /*
- * A basic +4 adder.
+ * A simple adder.
  */
-module plus_4_adder #(
+module adder #(
 )(
     input clk, // Clock signal
-    input [31:0] in, // Reset signal
+    input [31:0] in_a,
+    input [31:0] in_b,
     output [31:0] out
 );
 
     /* Logic */
     reg [31:0] out;
     always @(posedge clk) begin
-        out <= in + 4;
+        out <= in_a + in_b;
     end
 
 `ifdef FORMAL
@@ -24,7 +25,7 @@ module plus_4_adder #(
     /* Validate logic */
     always @(posedge clk) begin
     	if (f_past_valid) begin
-            assert(out == in + 4);
+            assert(out == in_a + in_b);
         end
     end
 `endif

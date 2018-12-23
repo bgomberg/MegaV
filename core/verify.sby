@@ -13,3 +13,7 @@ prep -top core
 core.sv
 program_counter.sv
 memory.sv
+instruction_decode.sv
+adder.sv
+register_file.sv
+alu.sv

@@ -3,7 +3,7 @@
 `include "instruction_decode.sv"
 `include "register_file.sv"
 `include "alu.sv"
-`include "plus_4_adder.sv"
+`include "adder.sv"
 
 `define STAGE_FETCH 0
 `define STAGE_DECODE 1
@@ -44,19 +44,28 @@ module core #(
     /* Program counter */
     wire [31:0] pc_pc /* verilator public */;
     wire [31:0] pc_next_pc /* verilator public */;
+    wire [31:0] pc_offset_pc /* verilator public */;
     wire pc_fault;
+    wire [31:0] pc_in = (decode_wb_pc_microcode == 2'b00) ? pc_next_pc : (
+        (decode_wb_pc_microcode == 2'b01) ? alu_out : (
+        (decode_wb_pc_microcode == 2'b10) ? pc_offset_pc : (
+        (decode_wb_pc_microcode == 2'b11) ? (alu_out[0] ? pc_offset_pc : pc_next_pc) : 32'b0)));
     program_counter pc_module(
         clk & stage[`STAGE_WRITE_BACK],
         reset,
-        (decode_wb_pc_microcode == 2'b00) ? 2'b01 : decode_wb_pc_microcode,
-        decode_imm,
-        (decode_wb_pc_microcode == 2'b00) ? pc_next_pc : alu_out,
+        pc_in,
         pc_pc,
         pc_fault);
-    plus_4_adder pc_adder_module(
+    adder offset_pc_adder_module(
         clk & stage[`STAGE_EXECUTE],
         pc_pc,
+        32'd4,
         pc_next_pc);
+    adder next_pc_adder_module(
+        clk & stage[`STAGE_EXECUTE],
+        pc_pc,
+        decode_imm,
+        pc_offset_pc);
 
     /* Memory */
     wire [31:0] mem_out /* verilator public */;
