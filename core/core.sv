@@ -31,11 +31,15 @@ module core #(
     end
 
     /* Program counter */
+    wire pc_en;
+    always @(posedge clk) begin
+        pc_en <= stage[`STAGE_WRITE_BACK];
+    end
     wire [31:0] pc_pc /* verilator public */;
     wire [31:0] pc_next_pc;
     wire pc_fault /* verilator public */;
     program_counter pc_module(
-        clk & stage[`STAGE_WRITE_BACK],
+        clk & pc_en,
         reset,
         decode_wb_pc_microcode,
         decode_imm,
@@ -52,7 +56,7 @@ module core #(
     wire [31:0] mem_out /* verilator public */;
     wire mem_fault /* verilator public */;
     memory mem_module(
-        clk & (mem_en),
+        clk & mem_en,
         (stage[`STAGE_FETCH] | stage[`STAGE_DECODE]) ? 3'b010 : {decode_ma_mem_microcode[3], decode_ma_mem_microcode[1:0]},
         (stage[`STAGE_EXECUTE] | stage[`STAGE_MEMORY]) ? alu_out : pc_pc,
         rf_read_data_b,
