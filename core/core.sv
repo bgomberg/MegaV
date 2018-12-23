@@ -57,8 +57,10 @@ module core #(
     wire mem_fault /* verilator public */;
     memory mem_module(
         clk & mem_en,
-        (stage[`STAGE_FETCH] | stage[`STAGE_DECODE]) ? 3'b010 : {decode_ma_mem_microcode[3], decode_ma_mem_microcode[1:0]},
-        (stage[`STAGE_EXECUTE] | stage[`STAGE_MEMORY]) ? alu_out : pc_pc,
+        // op needs to be set to b010 and stable before fetch stage starts (and remain stable during fetch stage)
+        (stage[`STAGE_WRITE_BACK] | stage[`STAGE_FETCH]) ? 3'b010 : {decode_ma_mem_microcode[3], decode_ma_mem_microcode[1:0]},
+        // address needs to be set to the PC and stable before fetch stage starts (and remain stable during fetch stage)
+        (stage[`STAGE_WRITE_BACK] | stage[`STAGE_FETCH]) ? pc_pc : alu_out,
         rf_read_data_b,
         mem_out,
         mem_fault);
@@ -105,7 +107,7 @@ module core #(
     wire [31:0] rf_read_data_b /* verilator public */;
     register_file rf_module(
         clk & rf_en,
-        stage[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[8],
+        ~stage[`STAGE_READ] & decode_wb_rf_microcode[8],
         decode_wb_rf_microcode[7:4],
         rf_write_data,
         decode_rd_rf_microcode[7:4],
