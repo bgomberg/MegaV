@@ -25,7 +25,7 @@ module adder #(
     /* Validate logic */
     always @(posedge clk) begin
     	if (f_past_valid) begin
-            assert(out == in_a + in_b);
+            assert(out == ($past(in_a) + $past(in_b)));
         end
     end
 `endif

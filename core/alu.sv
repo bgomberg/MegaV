@@ -62,7 +62,6 @@ module alu #(
             end
             default: begin
                 fault <= 1;
-                out <= 32'bx;
             end
         endcase
     end
@@ -120,7 +119,6 @@ module alu #(
                 end
                 default: begin
                     assert(fault);
-                    assert(out == 32'b1);
                 end
             endcase
         end

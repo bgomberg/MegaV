@@ -24,7 +24,7 @@ module core #(
 
     /* verilator lint_off UNOPT */
     /* Stage state variables */
-    wire [5:0] stage /* verilator public */;
+    reg [5:0] stage /* verilator public */;
     always @(posedge clk) begin
         if (reset) begin
             stage <= 6'b0;
@@ -134,8 +134,10 @@ module core #(
         alu_fault);
 
     /* Fault signal */
+    reg fault;
     always @(*) begin
         fault = pc_fault | mem_fault | decode_fault | alu_fault;
+`ifdef VERILATOR
         if (pc_fault)
             $display("!!! PC FAULT");
         if (mem_fault)
@@ -144,6 +146,7 @@ module core #(
             $display("!!! DECODE FAULT");
         if (alu_fault)
             $display("!!! ALU FAULT");
+`endif
     end
 
 `ifdef FORMAL

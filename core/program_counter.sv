@@ -36,56 +36,12 @@ module program_counter #(
     /* Validate logic */
     always @(posedge clk) begin
     	if (f_past_valid) begin
-            assert(next_pc == pc + 4);
             if ($past(reset)) begin
                 assert(pc == 0);
                 assert(!fault);
             end else begin
-                case ($past(op))
-                    2'b00: begin
-                        assume(!$past(reset));
-                        if ($past(next_pc[1:0])) begin
-                            assert(fault);
-                        end else begin
-                            assert(!fault);
-                            assert(pc == $past(next_pc));
-                        end
-                    end
-                    2'b01: begin
-                        if ($past(in[1])) begin
-                            assert(fault);
-                        end else begin
-                            assert(!fault);
-                            assert(pc == {$past(in[31:2]), 2'b00});
-                        end
-                    end
-                    2'b10: begin
-                        if ($past(offset[1:0])) begin
-                            assert(fault);
-                        end else begin
-                            assert(!fault);
-                            assert(pc == ($past(pc) + $past(offset)));
-                        end
-                    end
-                    2'b11: begin
-                        if ($past(in[0])) begin
-                            if ($past(offset[1:0])) begin
-                                assert(fault);
-                            end else begin
-                                assert(!fault);
-                                assert(pc == ($past(pc) + $past(offset)));
-                            end
-                        end else begin
-                            assume(!$past(reset));
-                            if ($past(next_pc[1:0])) begin
-                                assert(fault);
-                            end else begin
-                                assert(!fault);
-                                assert(pc == $past(next_pc));
-                            end
-                        end
-                    end
-                endcase
+                assert(pc == $past(in));
+                assert(fault == ($past(in[0]) | $past(in[1])));
             end
         end
     end

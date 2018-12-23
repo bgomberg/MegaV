@@ -31,17 +31,17 @@ module memory #(
         if (op_is_store) begin
             fake_memory[fake_addr] <= in[7:0];
             if (op[0] | op[1]) begin
-                fake_memory[{fake_addr[31:2], 2'b01}] <= in[15:8];
+                fake_memory[fake_addr | 2'b01] <= in[15:8];
             end
             if (op[1]) begin
-                fake_memory[{fake_addr[31:2], 2'b10}] <= in[23:16];
-                fake_memory[{fake_addr[31:2], 2'b11}] <= in[31:24];
+                fake_memory[fake_addr | 2'b10] <= in[23:16];
+                fake_memory[fake_addr | 2'b11] <= in[31:24];
             end
         end else begin
             out[7:0] <= fake_memory[fake_addr];
-            out[15:8] <= (op[0] | op[1]) ? fake_memory[{fake_addr[31:2], 2'b01}] : 8'b0;
-            out[23:16] <= op[1] ? fake_memory[{fake_addr[31:2], 2'b10}] : 8'b0;
-            out[31:24] <= op[1] ? fake_memory[{fake_addr[31:2], 2'b11}] : 8'b0;
+            out[15:8] <= (op[0] | op[1]) ? fake_memory[fake_addr | 2'b01] : 8'b0;
+            out[23:16] <= op[1] ? fake_memory[fake_addr | 2'b10] : 8'b0;
+            out[31:24] <= op[1] ? fake_memory[fake_addr | 2'b11] : 8'b0;
         end
         fault <= op_is_invalid | addr_is_misaligned;
     end
@@ -57,16 +57,16 @@ module memory #(
     (* anyconst *) wire [7:0] f_write_addr;
     reg [31:0] f_read_data;
     initial f_read_data = {
-        fake_memory[f_read_addr | 2'b11],
-        fake_memory[f_read_addr | 2'b10],
-        fake_memory[f_read_addr | 2'b01],
+        fake_memory[f_read_addr + 3],
+        fake_memory[f_read_addr + 2],
+        fake_memory[f_read_addr + 1],
         fake_memory[f_read_addr]
     };
     always @(*) begin
         assert(fake_memory[f_read_addr] == f_read_data[7:0]);
-        assert(fake_memory[f_read_addr | 2'b01] == f_read_data[15:8]);
-        assert(fake_memory[f_read_addr | 2'b10] == f_read_data[23:16]);
-        assert(fake_memory[f_read_addr | 2'b11] == f_read_data[31:24]);
+        assert(fake_memory[f_read_addr + 1] == f_read_data[15:8]);
+        assert(fake_memory[f_read_addr + 2] == f_read_data[23:16]);
+        assert(fake_memory[f_read_addr + 3] == f_read_data[31:24]);
     end
 
     /* Load path */
