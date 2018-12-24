@@ -22,7 +22,6 @@ module core #(
     output fault // Fault condition
 );
 
-    /* verilator lint_off UNOPT */
     /* Stage state variables */
     reg [5:0] stage /* verilator public */;
     always @(posedge clk) begin
@@ -86,7 +85,9 @@ module core #(
     wire decode_alu_b_mux_position /* verilator public */;
     wire [1:0] decode_wb_mux_position /* verilator public */;
     wire [9:0] decode_rd_rf_microcode /* verilator public */;
+    /* verilator lint_off UNOPT */
     wire [5:0] decode_ex_alu_microcode /* verilator public */;
+    /* verilator lint_on UNOPT */
     wire [4:0] decode_ma_mem_microcode /* verilator public */;
     wire [9:0] decode_wb_rf_microcode /* verilator public */;
     wire [1:0] decode_wb_pc_microcode /* verilator public */;
@@ -127,7 +128,7 @@ module core #(
     wire alu_fault;
     alu alu_module(
         clk & (stage[`STAGE_EXECUTE] & decode_ex_alu_microcode[5]),
-        decode_ex_alu_microcode[3:0], // FIXME: add branch instructions to ALU
+        decode_ex_alu_microcode[4:0],
         decode_alu_a_mux_position ? pc_pc : rf_read_data_a,
         decode_alu_b_mux_position ? decode_imm : rf_read_data_b,
         alu_out,

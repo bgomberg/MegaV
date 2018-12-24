@@ -17,3 +17,4 @@ instruction_decode.sv
 adder.sv
 register_file.sv
 alu.sv
+adder4.sv

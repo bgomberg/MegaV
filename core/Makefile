@@ -1,7 +1,89 @@
-REPO_ROOT := $(shell git rev-parse --show-toplevel)
+# Project constants
 PROJECT_NAME := core
+BUILD_DIR := build
 
-VERILOG_SRC_FILES := core.sv
+# Project files
+TOP_VERILOG_SRC_FILE := core.sv
+VERILOG_SRC_FILES := $(wildcard *.sv)
 SIM_SRC_FILES := $(abspath sim_main.cpp)
+SIM_HEADER_FILES :=
 
-include $(REPO_ROOT)/utils/make/project_template.mk
+# Generated variables
+REPO_ROOT := $(shell git rev-parse --show-toplevel)
+OBJ_DIR := $(BUILD_DIR)/obj
+OUT_DIR := $(BUILD_DIR)/out
+GATES_PNG_OUT := $(OUT_DIR)/$(PROJECT_NAME).png
+GATES_JSON_OUT := $(OUT_DIR)/$(PROJECT_NAME).json
+SIM_EXE_OUT := $(OUT_DIR)/$(PROJECT_NAME).exe
+
+# Project configuration
+VERILATOR_MODULE_NAME := Vmodule
+VERILATOR_ARGS := \
+	--exe \
+	-CFLAGS -Wno-attributes \
+	$(addprefix -CFLAGS -I,$(SIM_HEADER_FILES)) \
+	--top-module $(PROJECT_NAME) \
+	--cc \
+	-Mdir $(OBJ_DIR) \
+	-Wall \
+	--prefix $(VERILATOR_MODULE_NAME)
+
+# Executables
+DOT := dot
+VERILATOR := verilator
+SBY := sby
+YOSYS := yosys
+
+directories: $(OBJ_DIR) $(OUT_DIR)
+$(OBJ_DIR):
+	@mkdir -p $@
+$(OUT_DIR):
+	@mkdir -p $@
+
+gates_json: directories $(GATES_JSON_OUT)
+%.synth.ilang: $(TOP_VERILOG_SRC_FILE)
+	@echo "Building $(notdir $@)"
+	@$(YOSYS) -q -f verilog -b ilang -s $(REPO_ROOT)/core/yosys/synth.ys -o $@ $^
+%.gates.ilang: %.synth.ilang
+	@echo "Building $(notdir $@)"
+	@$(YOSYS) -q -f ilang -b ilang -s $(REPO_ROOT)/core/yosys/gates.ys -o $@ $^
+%.json: %.ilang
+	@echo "Building $(notdir $@)"
+	@$(YOSYS) -q -f ilang -b json -o $@ $^
+$(GATES_JSON_OUT): $(OBJ_DIR)/$(PROJECT_NAME).gates.json
+	@echo "Copying output $(notdir $@)"
+	@cp $< $@
+gates_png: directories $(GATES_PNG_OUT)
+$(GATES_PNG_OUT): $(OBJ_DIR)/$(PROJECT_NAME).gates.png
+	@echo "Copying output $(notdir $@)"
+	@cp $< $@
+%.png: %.dot
+	@echo "Building $(notdir $@)"
+	@$(DOT) -Tpng $(shell cygpath -w $<) -o $(shell cygpath -w $@)
+%.dot: %.ilang
+	@echo "Building $(notdir $@)"
+	@$(YOSYS) -q -f ilang -p "show -width -notitle -format dot -prefix $(basename $@)" $^
+
+build_sim: directories $(SIM_EXE_OUT)
+run_sim: build_sim
+	@$(SIM_EXE_OUT)
+$(SIM_EXE_OUT): $(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe
+	@echo "Copying output $(notdir $@)"
+	@cp $< $@
+$(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe: $(VERILOG_SRC_FILES) $(SIM_SRC_FILES) $(SIM_HEADER_FILES)
+	@echo "Building $(notdir $@)"
+	@$(VERILATOR) $(VERILATOR_ARGS) $(TOP_VERILOG_SRC_FILE) $(SIM_SRC_FILES)
+	@$(MAKE) -s -C $(OBJ_DIR)/ -f $(VERILATOR_MODULE_NAME).mk
+
+sby:
+	@$(SBY) -d $(OBJ_DIR)/sby -f verify.sby
+
+all: build_sim sby gates_json
+
+clean:
+	@echo "Removing build folder"
+	@rm -rf $(BUILD_DIR)
+
+.PRECIOUS: %.synth.ilang %.gates.ilang %.dot %.json
+.PHONY: gates_png gates_json build_sim run_sim sby all clean directories
+.DEFAULT_GOAL := all

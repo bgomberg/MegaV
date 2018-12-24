@@ -104,10 +104,13 @@ private:
 	((IMM << 20) | (RS1 << 15) | (FUNCT3 << 12) | (RD << 7) | (OPCODE))
 #define _S_TYPE(IMM, RS2, RS1, FUNCT3, OPCODE) \
 	(((IMM >> 5) << 25) | (RS2 << 20) | (RS1 << 15) | (FUNCT3 << 12) | ((IMM & 0x1f) << 7) | (OPCODE))
+#define _B_TYPE(IMM, RS2, RS1, FUNCT3, OPCODE) \
+	((_BIT(IMM, 12) << 31) | (_BITS(IMM, 10, 5) << 25) | (RS2 << 20) | (RS1 << 15) | (FUNCT3 << 12) | (_BITS(IMM, 4, 0) << 7) | (OPCODE))
 #define _J_TYPE(IMM, RD, OPCODE) \
 	((_BIT(IMM, 20) << 31) | (_BITS(IMM, 10, 1) << 21) | (_BIT(IMM, 11) << 20) | (_BITS(IMM, 19, 12) << 12) | (RD << 7) | (OPCODE))
 
 #define JAL(RD, OFFSET) _J_TYPE(UINT32_C(OFFSET), RD, 0x6f)
+#define BEQ(RS1, RS2, OFFSET) _B_TYPE(UINT32_C(OFFSET), RS2, RS1, 0x0, 0x63)
 #define SW(RS2, RS1, OFFSET) _S_TYPE(UINT32_C(OFFSET), RS2, RS1, 0x2, 0x23)
 #define LW(RD, RS1, OFFSET) _I_TYPE(UINT32_C(OFFSET), RS1, 0x2, RD, 0x03)
 #define ADDI(RD, RS1, IMM) _I_TYPE(UINT32_C(IMM), RS1, 0x0, RD, 0x13)
@@ -127,7 +130,9 @@ static const uint32_t TEST_PROGRAM[] = {
 	JAL(0, 0), // JAL r0,0
 	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
 	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
-	JAL(11, -12), // JAL r11,-12
+	BEQ(0, 5, 20), // BEQ r0,r5,20
+	BEQ(0, 0, 4), // BEQ r0,r0,4
+	JAL(11, -20), // JAL r11,-20
 };
 
 
