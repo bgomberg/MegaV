@@ -3,10 +3,23 @@ PROJECT_NAME := core
 BUILD_DIR := build
 
 # Project files
-TOP_VERILOG_SRC_FILE := core.sv
-VERILOG_SRC_FILES := $(wildcard *.sv)
-SIM_SRC_FILES := $(abspath sim_main.cpp)
-SIM_HEADER_FILES :=
+TOP_VERILOG_SRC_FILE := verilog/core.sv
+VERILOG_SRC_FILES := \
+	verilog/core.sv \
+	verilog/program_counter.sv \
+	verilog/memory.sv \
+	verilog/instruction_decode.sv \
+	verilog/adder.sv \
+	verilog/register_file.sv \
+	verilog/alu.sv \
+	verilog/adder4.sv
+SIM_SRC_FILES := \
+	sim/sim_main.cpp
+SIM_HEADER_FILES := \
+	sim/isa.h
+SBY_CONFIG_FILE := scripts/verify.sby
+YOSYS_SYNTH_SCRIPT_FILE = scripts/synth.ys
+YOSYS_GATES_SCRIPT_FILE = scripts/gates.ys
 
 # Generated variables
 REPO_ROOT := $(shell git rev-parse --show-toplevel)
@@ -21,12 +34,13 @@ VERILATOR_MODULE_NAME := Vmodule
 VERILATOR_ARGS := \
 	--exe \
 	-CFLAGS -Wno-attributes \
-	$(addprefix -CFLAGS -I,$(SIM_HEADER_FILES)) \
+	$(addprefix -CFLAGS -I,$(dir $(abspath $(SIM_HEADER_FILES)))) \
 	--top-module $(PROJECT_NAME) \
 	--cc \
 	-Mdir $(OBJ_DIR) \
 	-Wall \
-	--prefix $(VERILATOR_MODULE_NAME)
+	--prefix $(VERILATOR_MODULE_NAME) \
+	$(addprefix -I,$(dir $(VERILOG_SRC_FILES)))
 
 # Executables
 DOT := dot
@@ -43,10 +57,10 @@ $(OUT_DIR):
 gates_json: directories $(GATES_JSON_OUT)
 %.synth.ilang: $(TOP_VERILOG_SRC_FILE)
 	@echo "Building $(notdir $@)"
-	@$(YOSYS) -q -f verilog -b ilang -s $(REPO_ROOT)/core/yosys/synth.ys -o $@ $^
+	@$(YOSYS) -q -f verilog -b ilang -s $(YOSYS_SYNTH_SCRIPT_FILE) -o $@ $^
 %.gates.ilang: %.synth.ilang
 	@echo "Building $(notdir $@)"
-	@$(YOSYS) -q -f ilang -b ilang -s $(REPO_ROOT)/core/yosys/gates.ys -o $@ $^
+	@$(YOSYS) -q -f ilang -b ilang -s $(YOSYS_GATES_SCRIPT_FILE) -o $@ $^
 %.json: %.ilang
 	@echo "Building $(notdir $@)"
 	@$(YOSYS) -q -f ilang -b json -o $@ $^
@@ -72,11 +86,11 @@ $(SIM_EXE_OUT): $(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe
 	@cp $< $@
 $(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe: $(VERILOG_SRC_FILES) $(SIM_SRC_FILES) $(SIM_HEADER_FILES)
 	@echo "Building $(notdir $@)"
-	@$(VERILATOR) $(VERILATOR_ARGS) $(TOP_VERILOG_SRC_FILE) $(SIM_SRC_FILES)
+	@$(VERILATOR) $(VERILATOR_ARGS) $(TOP_VERILOG_SRC_FILE) $(abspath $(SIM_SRC_FILES))
 	@$(MAKE) -s -C $(OBJ_DIR)/ -f $(VERILATOR_MODULE_NAME).mk
 
 sby:
-	@$(SBY) -d $(OBJ_DIR)/sby -f verify.sby
+	@$(SBY) -d $(OBJ_DIR)/sby -f $(SBY_CONFIG_FILE)
 
 all: build_sim sby gates_json
 
