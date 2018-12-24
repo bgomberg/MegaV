@@ -1,3 +1,5 @@
+#include <isa.h>
+
 #include <Vmodule.h>
 #include <Vmodule_core.h>
 #include <Vmodule_memory.h>
@@ -8,15 +10,35 @@
 #include <stdio.h>
 
 
-class SimulatedCore {
+#define ARRAY_LENGTH(ARR) ((sizeof(ARR)) / (sizeof(*ARR)))
+
+static const uint32_t TEST_PROGRAM[] = {
+	ADDI(1, 0, 0x11), // ADDI r1,r0,0x11
+	ADDI(2, 0, 0x31), // ADDI r2,r0,0x31
+	ADD(2, 1, 2), // ADD r2,r1,r2
+	ADD(3, 1, 2), // ADD r3,r1,r2
+	SW(3, 0, 0x80), // SW r3,r0,0x80
+	LW(4, 0, 0x80), // LW r4,r0,0x80
+	ADDI(5, 0, 0x100), // ADDI r5,r0,0x100
+	JAL(10, 8), // JAL r10,8
+	JAL(0, 0), // JAL r0,0
+	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
+	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
+	BEQ(0, 5, 20), // BEQ r0,r5,20
+	BEQ(0, 0, 4), // BEQ r0,r0,4
+	JAL(11, -20), // JAL r11,-20
+};
+
+
+class Core {
 public:
-	SimulatedCore() : module_(new Vmodule()) {
+	Core() : module_(new Vmodule()) {
 		module_->clk = 0;
 		module_->reset = 0;
 		eval();
 	}
 
-	~SimulatedCore() {
+	~Core() {
 		delete module_;
 		module_ = NULL;
 	}
@@ -96,34 +118,13 @@ private:
 	}
 };
 
-#include <isa.h>
-
-#define ARRAY_LENGTH(ARR) ((sizeof(ARR)) / (sizeof(*ARR)))
-
-static const uint32_t TEST_PROGRAM[] = {
-	ADDI(1, 0, 0x11), // ADDI r1,r0,0x11
-	ADDI(2, 0, 0x31), // ADDI r2,r0,0x31
-	ADD(2, 1, 2), // ADD r2,r1,r2
-	ADD(3, 1, 2), // ADD r3,r1,r2
-	SW(3, 0, 0x80), // SW r3,r0,0x80
-	LW(4, 0, 0x80), // LW r4,r0,0x80
-	ADDI(5, 0, 0x100), // ADDI r5,r0,0x100
-	JAL(10, 8), // JAL r10,8
-	JAL(0, 0), // JAL r0,0
-	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
-	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
-	BEQ(0, 5, 20), // BEQ r0,r5,20
-	BEQ(0, 0, 4), // BEQ r0,r0,4
-	JAL(11, -20), // JAL r11,-20
-};
-
 
 int main(int argc, char** argv) {
 	Verilated::commandArgs(argc, argv);
 	printf("\n");
 
 	// Create our core object, reset it, and copy in the program
-	SimulatedCore core;
+	Core core;
 	core.reset();
 	memcpy(core->mem_module->fake_memory, TEST_PROGRAM, sizeof(TEST_PROGRAM));
 	printf("\n");
@@ -139,6 +140,7 @@ int main(int argc, char** argv) {
 		printf("\n");
 	}
 
+	// Dump the non-zero registers and memory
 	printf("Registers:\n");
 	for (int i = 1; i < 16; i++) {
 		uint32_t value = core->rf_module->registers[i-1];
@@ -147,7 +149,7 @@ int main(int argc, char** argv) {
 		}
 	}
 	printf("Memory:\n");
-	for (int i = 0x80; i < 0x100; i += 4) {
+	for (int i = 0x00; i < 0x100; i += 4) {
 		uint32_t value;
 		memcpy(&value, &core->mem_module->fake_memory[i], sizeof(value));
 		if (value) {
