@@ -31,17 +31,17 @@ module memory #(
         if (op_is_store) begin
             fake_memory[fake_addr] <= in[7:0];
             if (op[0] | op[1]) begin
-                fake_memory[fake_addr | 2'b01] <= in[15:8];
+                fake_memory[{fake_addr[31:1], 1'b1}] <= in[15:8];
             end
             if (op[1]) begin
-                fake_memory[fake_addr | 2'b10] <= in[23:16];
-                fake_memory[fake_addr | 2'b11] <= in[31:24];
+                fake_memory[{fake_addr[31:2], 2'b10}] <= in[23:16];
+                fake_memory[{fake_addr[31:2], 2'b11}] <= in[31:24];
             end
         end else begin
             out[7:0] <= fake_memory[fake_addr];
-            out[15:8] <= (op[0] | op[1]) ? fake_memory[fake_addr | 2'b01] : 8'b0;
-            out[23:16] <= op[1] ? fake_memory[fake_addr | 2'b10] : 8'b0;
-            out[31:24] <= op[1] ? fake_memory[fake_addr | 2'b11] : 8'b0;
+            out[15:8] <= (op[0] | op[1]) ? fake_memory[{fake_addr[31:1], 1'b1}] : 8'b0;
+            out[23:16] <= op[1] ? fake_memory[{fake_addr[31:2], 2'b10}] : 8'b0;
+            out[31:24] <= op[1] ? fake_memory[{fake_addr[31:2], 2'b11}] : 8'b0;
         end
         fault <= op_is_invalid | addr_is_misaligned;
     end
