@@ -1,4 +1,4 @@
-`include "adder4.sv"
+`include "adder32.sv"
 
 /*
  * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I/E instruction set.
@@ -30,24 +30,7 @@ module alu #(
     wire [31:0] adder_a = in_a;
     wire [31:0] adder_b = in_b ^ {32{op[3]}};
     wire [31:0] adder_sum;
-    wire adder_carry_0;
-    wire adder_carry_1;
-    wire adder_carry_2;
-    wire adder_carry_3;
-    wire adder_carry_4;
-    wire adder_carry_5;
-    wire adder_carry_6;
-    /* verilator lint_off UNUSED */
-    wire adder_carry_7;
-    /* verilator lint_on UNUSED */
-    adder4 adder0(adder_a[3:0], adder_b[3:0], adder_carry_in, adder_sum[3:0], adder_carry_0);
-    adder4 adder1(adder_a[7:4], adder_b[7:4], adder_carry_0, adder_sum[7:4], adder_carry_1);
-    adder4 adder2(adder_a[11:8], adder_b[11:8], adder_carry_1, adder_sum[11:8], adder_carry_2);
-    adder4 adder3(adder_a[15:12], adder_b[15:12], adder_carry_2, adder_sum[15:12], adder_carry_3);
-    adder4 adder4(adder_a[19:16], adder_b[19:16], adder_carry_3, adder_sum[19:16], adder_carry_4);
-    adder4 adder5(adder_a[23:20], adder_b[23:20], adder_carry_4, adder_sum[23:20], adder_carry_5);
-    adder4 adder6(adder_a[27:24], adder_b[27:24], adder_carry_5, adder_sum[27:24], adder_carry_6);
-    adder4 adder7(adder_a[31:28], adder_b[31:28], adder_carry_6, adder_sum[31:28], adder_carry_7);
+    adder32 adder(adder_a, adder_b, adder_carry_in, adder_sum);
 
     /* Comparison operations */
     wire signed_lt_result = ($signed(in_a) < $signed(in_b)) ? 1'b1 : 1'b0;

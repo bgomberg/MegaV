@@ -3,7 +3,7 @@
 `include "instruction_decode.sv"
 `include "register_file.sv"
 `include "alu.sv"
-`include "adder.sv"
+`include "adder32_sync.sv"
 
 `define STAGE_FETCH 0
 `define STAGE_DECODE 1
@@ -42,7 +42,7 @@ module core #(
 
     /* Program counter */
     wire [31:0] pc_pc /* verilator public */;
-    wire [31:0] pc_next_pc /* verilator public */;
+    reg [31:0] pc_next_pc /* verilator public */;
     wire [31:0] pc_offset_pc /* verilator public */;
     wire pc_fault;
     wire [31:0] pc_in = (decode_wb_pc_microcode == 2'b00) ? pc_next_pc : (
@@ -55,12 +55,12 @@ module core #(
         pc_in,
         pc_pc,
         pc_fault);
-    adder offset_pc_adder_module(
+    adder32_sync offset_pc_adder_module(
         clk & stage[`STAGE_EXECUTE],
         pc_pc,
         32'd4,
         pc_next_pc);
-    adder next_pc_adder_module(
+    adder32_sync next_pc_adder_module(
         clk & stage[`STAGE_EXECUTE],
         pc_pc,
         decode_imm,

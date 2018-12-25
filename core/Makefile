@@ -9,10 +9,11 @@ VERILOG_SRC_FILES := \
 	verilog/program_counter.sv \
 	verilog/memory.sv \
 	verilog/instruction_decode.sv \
-	verilog/adder.sv \
 	verilog/register_file.sv \
 	verilog/alu.sv \
-	verilog/adder4.sv
+	verilog/adder4.sv \
+	verilog/adder32.sv \
+	verilog/adder32_sync.sv
 SIM_SRC_FILES := \
 	sim/sim_main.cpp
 SIM_HEADER_FILES := \
@@ -55,18 +56,18 @@ $(OUT_DIR):
 	@mkdir -p $@
 
 gates_json: directories $(GATES_JSON_OUT)
-%.synth.ilang: $(TOP_VERILOG_SRC_FILE)
-	@echo "Building $(notdir $@)"
-	@$(YOSYS) -q -f verilog -b ilang -s $(YOSYS_SYNTH_SCRIPT_FILE) -o $@ $^
-%.gates.ilang: %.synth.ilang
-	@echo "Building $(notdir $@)"
-	@$(YOSYS) -q -f ilang -b ilang -s $(YOSYS_GATES_SCRIPT_FILE) -o $@ $^
-%.json: %.ilang
-	@echo "Building $(notdir $@)"
-	@$(YOSYS) -q -f ilang -b json -o $@ $^
 $(GATES_JSON_OUT): $(OBJ_DIR)/$(PROJECT_NAME).gates.json
 	@echo "Copying output $(notdir $@)"
 	@cp $< $@
+%.json: %.ilang
+	@echo "Building $(notdir $@)"
+	@$(YOSYS) -q -f ilang -b json -o $@ $^
+%.gates.ilang: %.synth.ilang
+	@echo "Building $(notdir $@)"
+	@$(YOSYS) -q -f ilang -b ilang -s $(YOSYS_GATES_SCRIPT_FILE) -o $@ $^
+%.synth.ilang: $(TOP_VERILOG_SRC_FILE)
+	@echo "Building $(notdir $@)"
+	@$(YOSYS) -q -f verilog -b ilang -s $(YOSYS_SYNTH_SCRIPT_FILE) -o $@ $^
 gates_png: directories $(GATES_PNG_OUT)
 $(GATES_PNG_OUT): $(OBJ_DIR)/$(PROJECT_NAME).gates.png
 	@echo "Copying output $(notdir $@)"
@@ -92,7 +93,9 @@ $(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe: $(VERILOG_SRC_FILES) $(SIM_SRC_FILES) $
 sby:
 	@$(SBY) -d $(OBJ_DIR)/sby -f $(SBY_CONFIG_FILE)
 
-all: build_sim sby gates_json
+all: build_sim gates_json
+
+test: sby run_sim
 
 clean:
 	@echo "Removing build folder"

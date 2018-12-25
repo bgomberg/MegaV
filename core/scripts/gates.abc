@@ -1,0 +1,21 @@
+read_library scripts/cells.genlib
+
+strash
+
+ifraig
+
+scorr
+
+dc2
+
+dretime
+
+strash
+
+&get -n
+
+&dch -f
+
+&nf {D}
+
+&put
