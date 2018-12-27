@@ -36,25 +36,29 @@ module instruction_decode #(
     wire [4:0] rs1 = instr[19:15];
     wire [4:0] rs2 = instr[24:20];
     wire [6:0] funct7 = instr[31:25];
-    wire opcode_is_op = opcode[5] & opcode[4] & ~opcode[2];
+    wire opcode_is_op = ~opcode[6] & opcode[5] & opcode[4] & ~opcode[2];
     wire opcode_is_opimm = ~opcode[5] & opcode[4] & ~opcode[2];
-    wire opcode_is_load = ~opcode[5] & ~opcode[4];
+    wire opcode_is_load = ~opcode[5] & ~opcode[4] & ~opcode[3];
     wire opcode_is_store = ~opcode[6] & opcode[5] & ~opcode[4];
-    wire opcode_is_auipc = ~opcode[5] & opcode[2];
-    wire opcode_is_branch = opcode[6] & ~opcode[2];
-    wire opcode_is_jal = opcode[3];
+    wire opcode_is_auipc = ~opcode[5] & ~opcode[3] & opcode[2];
+    wire opcode_is_branch = opcode[6] & ~opcode[4] & ~opcode[2];
+    wire opcode_is_jal = opcode[5] & opcode[3];
     wire opcode_is_jalr = ~opcode[4] & ~opcode[3] & opcode[2];
     wire opcode_is_lui = ~opcode[6] & opcode[5] & opcode[2];
+    wire opcode_is_fence = ~opcode[6] & opcode[3];
+    wire opcode_is_csr_env = opcode[6] & opcode[4];
     wire invalid_opcode = ~opcode[0] | ~opcode[1] |
-        (~opcode[6] & opcode[3]) |
         (opcode[3] & ~opcode[2]) |
+        (opcode[4] & opcode[3]) |
         (opcode[6] & ~opcode[5]) |
-        (opcode[6] & opcode[4]) |
-        (~opcode[6] & ~opcode[4] & opcode[2]);
+        (~opcode[6] & opcode[5] & opcode[3]) |
+        (opcode[6] & opcode[4] & opcode[2]) |
+        (~opcode[6] & ~opcode[4] & ~opcode[3] & opcode[2]);
 
     /* Read Stage */
-    wire rd_rf_enable = ~(opcode_is_lui | opcode_is_auipc | opcode_is_jal);
-    wire invalid_rs = rd_rf_enable & (rs1[4] | ((opcode_is_op | opcode_is_store | opcode_is_branch) & rs2[4]));
+    wire rd_rf_enable = ~(opcode_is_lui | opcode_is_auipc | opcode_is_jal | opcode_is_fence);
+    wire invalid_rs = (rd_rf_enable & (rs1[4] | ((opcode_is_op | opcode_is_store | opcode_is_branch) & rs2[4]))) |
+        (opcode_is_fence & ((rs1 != 5'b0) | (funct3[0] & (rs2 != 5'b0))));
     always @(posedge clk) begin
         rd_rf_microcode <= {
             rd_rf_enable,
@@ -73,14 +77,17 @@ module instruction_decode #(
         (opcode_is_store & funct3[1] & funct3[0]) |
         (opcode_is_load & funct3[1] & funct3[0]) |
         (opcode_is_load & funct3[2] & funct3[1]) |
-        (opcode_is_branch & ~funct3[2] & funct3[1]);
+        (opcode_is_branch & ~funct3[2] & funct3[1]) |
+        (opcode_is_fence & (funct3[2] | funct3[1]));
     wire funct7_non_funct_bit_set = funct7[6] | funct7[4] | funct7[3] | funct7[2] | funct7[1] | funct7[0];
     wire invalid_funct7 = (opcode_is_op & funct7_non_funct_bit_set) |
         (opcode_is_op & funct3[1] & funct7[5]) |
         (opcode_is_opimm & ~funct3[1] & funct3[0] & funct7_non_funct_bit_set) |
         (opcode_is_op & ~funct3[2] & funct3[0] & funct7[5]) |
         (opcode_is_op & funct3[2] & ~funct3[0] & funct7[5]) |
-        (opcode_is_opimm & ~funct3[2] & ~funct3[1] & funct3[0] & funct7[5]);
+        (opcode_is_opimm & ~funct3[2] & ~funct3[1] & funct3[0] & funct7[5]) |
+        (opcode_is_fence & (funct7[6] | funct7[5] | funct7[4] | funct7[3])) |
+        (opcode_is_fence & funct3[0] & (funct7[2] | funct7[1] | funct7[0]));
     always @(posedge clk) begin
         ex_alu_microcode <= {
             (opcode_is_op | opcode_is_opimm | opcode_is_branch | opcode_is_load | opcode_is_store | opcode_is_auipc |
@@ -103,8 +110,8 @@ module instruction_decode #(
     end
 
     /* Write Back Stage */
-    wire wb_rf_enable = ~(opcode_is_store | opcode_is_branch);
-    wire invalid_rd = wb_rf_enable & rd[4];
+    wire wb_rf_enable = ~(opcode_is_store | opcode_is_branch | opcode_is_fence);
+    wire invalid_rd = (wb_rf_enable & rd[4]) | (opcode_is_fence & rd != 5'b0);
     always @(posedge clk) begin
         wb_rf_microcode <= {
             wb_rf_enable,
@@ -158,7 +165,8 @@ module instruction_decode #(
     always @(*) begin
         if (!invalid_opcode) begin
             assert((opcode_is_op + opcode_is_opimm + opcode_is_load + opcode_is_store + opcode_is_auipc +
-                opcode_is_branch + opcode_is_jal + opcode_is_jalr + opcode_is_lui) == 1);
+                opcode_is_branch + opcode_is_jal + opcode_is_jalr + opcode_is_lui + opcode_is_fence +
+                opcode_is_csr_env) == 1);
         end
     end
     wire has_rd_stage = rd_rf_microcode[9];
@@ -337,6 +345,50 @@ module instruction_decode #(
                         assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
                         assert(wb_pc_microcode == 2'b00);
                     end
+                end
+                7'b0001111: begin // FENCE
+                    assert($past(opcode_is_fence));
+                    assert(!$past(invalid_opcode));
+                    assert($past(invalid_funct3) == ($past(instr[14:13]) != 2'b0));
+                    if (~$past(instr[12])) begin
+                        // FENCE
+                        assert($past(invalid_funct7) == ($past(instr[31:28]) != 4'b0));
+                        assert($past(invalid_rs) == ($past(instr[19:15]) != 5'b0));
+                    end else begin
+                        // FENCE.I
+                        assert($past(invalid_funct7) == ($past(instr[31:25]) != 7'b0));
+                        assert($past(invalid_rs) == ($past(instr[24:15]) != 10'b0));
+                    end
+                    assert($past(invalid_rd) == ($past(instr[11:7]) != 5'b0));
+                    assert(fault == ($past(invalid_funct7) || $past(invalid_funct3) || $past(invalid_rs) || $past(invalid_rd)));
+                    if (!fault) begin
+                        assert(!has_rd_stage && !has_ex_stage && !has_ma_stage);
+                        assert(rd_rf_microcode[9] == 1'b0);
+                        assert(ex_alu_microcode[5] == 1'b0);
+                        assert(ma_mem_microcode[4] == 1'b0);
+                        assert(wb_rf_microcode[9] == 1'b0);
+                        assert(wb_pc_microcode == 2'b00);
+                    end
+                end
+                7'b1110011: begin // CSR/ENV
+                    assert($past(opcode_is_csr_env));
+                    // assert(!$past(invalid_opcode) && !$past(invalid_funct3));
+                    // assert($past(invalid_funct7) == ((($past(instr[31]) != 1'b0) || ($past(instr[29:25]) != 5'b00000)) ||
+                    //     ($past(instr[30]) && ($past(instr[14:12]) != 3'b000) && ($past(instr[14:12]) != 3'b101))));
+                    // assert($past(invalid_rs) == ($past(instr[19]) || $past(instr[24])));
+                    // assert($past(invalid_rd) == $past(instr[11]));
+                    // assert(fault == ($past(invalid_funct7) || $past(invalid_rs) || $past(invalid_rd)));
+                    // if (!fault) begin
+                    //     assert(has_rd_stage && has_ex_stage && !has_ma_stage);
+                    //     assert(alu_a_mux_position == 1'b0);
+                    //     assert(alu_b_mux_position == 1'b0);
+                    //     assert(wb_mux_position == 2'b00);
+                    //     assert(rd_rf_microcode == {2'b10, $past(instr[18:15]), $past(instr[23:20])});
+                    //     assert(ex_alu_microcode == {2'b10, $past(instr[30]), $past(instr[14:12])});
+                    //     assert(ma_mem_microcode[4] == 1'b0);
+                    //     assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
+                    //     assert(wb_pc_microcode == 2'b00);
+                    // end
                 end
                 default: begin
                     assert($past(invalid_opcode));
