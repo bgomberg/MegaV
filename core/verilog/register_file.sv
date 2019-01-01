@@ -1,25 +1,21 @@
 /*
  * A 16x32 register file with r0 tied to 0 and two read ports and one write port.
  */
-module register_file #(
-    parameter ADDR_WIDTH = 4,
-    parameter DATA_WIDTH = 32,
-    parameter NUM_REGS = 16
-)(
+module register_file(
     input clk, // Clock signal
     input write_en, // Perform a write operation
-    input [ADDR_WIDTH-1:0] write_addr, // Address to write to
-    input [DATA_WIDTH-1:0] write_data, // Data to be written
-    input [ADDR_WIDTH-1:0] read_addr_a, // Address to read from (bus A)
-    output [DATA_WIDTH-1:0] read_data_a, // Data which was read (bus A)
-    input [ADDR_WIDTH-1:0] read_addr_b, // Address to read from (bus B)
-    output [DATA_WIDTH-1:0] read_data_b // Data which was read (bus B)
+    input [3:0] write_addr, // Address to write to
+    input [31:0] write_data, // Data to be written
+    input [3:0] read_addr_a, // Address to read from (bus A)
+    output [31:0] read_data_a, // Data which was read (bus A)
+    input [3:0] read_addr_b, // Address to read from (bus B)
+    output [31:0] read_data_b // Data which was read (bus B)
 );
 
     /* Internal variables */
-    reg [DATA_WIDTH-1:0] registers[1:NUM_REGS-1] /* verilator public */;
-    reg [DATA_WIDTH-1:0] read_data_a;
-    reg [DATA_WIDTH-1:0] read_data_b;
+    reg [31:0] registers[1:15] /* verilator public */;
+    reg [31:0] read_data_a;
+    reg [31:0] read_data_b;
 
     /* Logic */
     always @(posedge clk) begin
@@ -50,11 +46,11 @@ module register_file #(
         f_past_valid = 1;
     end
 
-    (* anyconst *) wire [ADDR_WIDTH-1:0] f_read_addr_a;
-    (* anyconst *) wire [ADDR_WIDTH-1:0] f_read_addr_b;
-    (* anyconst *) wire [ADDR_WIDTH-1:0] f_write_addr;
-    reg [DATA_WIDTH-1:0] f_read_data_a;
-    reg [DATA_WIDTH-1:0] f_read_data_b;
+    (* anyconst *) wire [3:0] f_read_addr_a;
+    (* anyconst *) wire [3:0] f_read_addr_b;
+    (* anyconst *) wire [3:0] f_write_addr;
+    reg [31:0] f_read_data_a;
+    reg [31:0] f_read_data_b;
     initial f_read_data_a = registers[f_read_addr_a];
     initial f_read_data_b = registers[f_read_addr_b];
     always @(*) begin

@@ -4,6 +4,7 @@
 `include "register_file.sv"
 `include "alu.sv"
 `include "adder32_sync.sv"
+`include "csr.sv"
 
 `define STAGE_FETCH 0
 `define STAGE_DECODE 1
@@ -15,8 +16,7 @@
 /*
  * The core which controls and integrates the individual components of the CPU.
  */
-module core #(
-)(
+module core(
     input clk, // Clock signal
     input reset, // Reset signal
     output fault // Fault condition
@@ -45,12 +45,12 @@ module core #(
     reg [31:0] pc_next_pc /* verilator public */;
     wire [31:0] pc_offset_pc /* verilator public */;
     wire pc_fault;
-    wire [31:0] pc_in = (decode_wb_pc_microcode == 2'b00) ? pc_next_pc : (
-        (decode_wb_pc_microcode == 2'b01) ? alu_out : (
-        (decode_wb_pc_microcode == 2'b10) ? pc_offset_pc : (
-        (decode_wb_pc_microcode == 2'b11) ? (alu_out[0] ? pc_offset_pc : pc_next_pc) : 32'b0)));
+    wire [31:0] pc_in = (decode_wb_pc_mux_position == 2'b00) ? pc_next_pc : (
+        (decode_wb_pc_mux_position == 2'b01) ? ex_out : (
+        (decode_wb_pc_mux_position == 2'b10) ? pc_offset_pc : (
+        (decode_wb_pc_mux_position == 2'b11) ? (alu_out[0] ? pc_offset_pc : pc_next_pc) : 32'b0)));
     program_counter pc_module(
-        clk & stage[`STAGE_WRITE_BACK],
+        clk & (reset | stage[`STAGE_WRITE_BACK]),
         reset,
         pc_in,
         pc_pc,
@@ -83,14 +83,16 @@ module core #(
     wire [31:0] decode_imm /* verilator public */;
     wire decode_alu_a_mux_position /* verilator public */;
     wire decode_alu_b_mux_position /* verilator public */;
+    wire decode_csr_mux_position /* verilator public */;
     wire [1:0] decode_wb_mux_position /* verilator public */;
     wire [9:0] decode_rd_rf_microcode /* verilator public */;
     /* verilator lint_off UNOPT */
     wire [5:0] decode_ex_alu_microcode /* verilator public */;
+    wire [15:0] decode_ex_csr_microcode /* verilator public */;
     /* verilator lint_on UNOPT */
     wire [4:0] decode_ma_mem_microcode /* verilator public */;
     wire [9:0] decode_wb_rf_microcode /* verilator public */;
-    wire [1:0] decode_wb_pc_microcode /* verilator public */;
+    wire [1:0] decode_wb_pc_mux_position /* verilator public */;
     wire decode_fault;
     instruction_decode decode_module(
         clk & stage[`STAGE_DECODE],
@@ -98,16 +100,19 @@ module core #(
         decode_imm,
         decode_alu_a_mux_position,
         decode_alu_b_mux_position,
+        decode_csr_mux_position,
         decode_wb_mux_position,
         decode_rd_rf_microcode,
         decode_ex_alu_microcode,
         decode_ma_mem_microcode,
+        decode_ex_csr_microcode,
         decode_wb_rf_microcode,
-        decode_wb_pc_microcode,
+        decode_wb_pc_mux_position,
         decode_fault);
 
     /* Register file */
-    wire [31:0] rf_write_data /* verilator public */ = (decode_wb_mux_position == 2'b00) ? alu_out : (
+    wire [31:0] ex_out = decode_ex_alu_microcode[5] ? alu_out : csr_read_value;
+    wire [31:0] rf_write_data /* verilator public */ = (decode_wb_mux_position == 2'b00) ? ex_out : (
         (decode_wb_mux_position == 2'b01) ? decode_imm : (
         (decode_wb_mux_position == 2'b10) ? mem_out :
         pc_next_pc));
@@ -126,18 +131,31 @@ module core #(
     /* ALU */
     wire [31:0] alu_out /* verilator public */;
     wire alu_fault;
+    wire [31:0] alu_in_a = decode_alu_a_mux_position ? pc_pc : rf_read_data_a;
     alu alu_module(
         clk & (stage[`STAGE_EXECUTE] & decode_ex_alu_microcode[5]),
         decode_ex_alu_microcode[4:0],
-        decode_alu_a_mux_position ? pc_pc : rf_read_data_a,
+        alu_in_a,
         decode_alu_b_mux_position ? decode_imm : rf_read_data_b,
         alu_out,
         alu_fault);
 
+    wire [31:0] csr_read_value /* verilator public */;
+    wire csr_fault;
+    csr csr_module(
+        clk & (reset | (stage[`STAGE_EXECUTE] & decode_ex_csr_microcode[15])),
+        reset,
+        decode_ex_csr_microcode[2:0],
+        decode_ex_csr_microcode[14:3],
+        decode_csr_mux_position ? decode_imm : alu_in_a,
+        csr_read_value,
+        csr_fault
+    );
+
     /* Fault signal */
     reg fault;
     always @(*) begin
-        fault = pc_fault | mem_fault | decode_fault | alu_fault;
+        fault = pc_fault | mem_fault | decode_fault | alu_fault | csr_fault;
 `ifdef VERILATOR
         if (pc_fault)
             $display("!!! PC FAULT");
@@ -147,6 +165,8 @@ module core #(
             $display("!!! DECODE FAULT");
         if (alu_fault)
             $display("!!! ALU FAULT");
+        if (csr_fault)
+            $display("!!! CSR FAULT");
 `endif
     end
 

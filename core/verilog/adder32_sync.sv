@@ -3,8 +3,7 @@
 /*
  * A clocked 32-bit adder.
  */
-module adder32_sync #(
-)(
+module adder32_sync(
     input clk, // Clock
     input [31:0] a, // Input data
     input [31:0] b, // Input data

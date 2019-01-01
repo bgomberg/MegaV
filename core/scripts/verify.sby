@@ -1,6 +1,6 @@
 [options]
 mode prove
-depth 10
+depth 8
 
 [engines]
 smtbmc yices
@@ -19,3 +19,4 @@ verilog/alu.sv
 verilog/adder4.sv
 verilog/adder32.sv
 verilog/adder32_sync.sv
+verilog/csr.sv

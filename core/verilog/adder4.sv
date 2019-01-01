@@ -4,8 +4,7 @@
 /*
  * A 4 bit full adder.
  */
-module adder4 #(
-)(
+module adder4(
     input [3:0] a, // Input data
     input [3:0] b, // Input data
     input carry_in, // Carry in

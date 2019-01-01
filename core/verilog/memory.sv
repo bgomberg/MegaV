@@ -1,8 +1,7 @@
 /*
  * Memory access unit.
  */
-module memory #(
-)(
+module memory(
     input clk, // Clock signal
     input [2:0] op, // Operation to perform
     /* verilator lint_off UNUSED */

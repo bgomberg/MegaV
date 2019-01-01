@@ -13,6 +13,13 @@
 #define ARRAY_LENGTH(ARR) ((sizeof(ARR)) / (sizeof(*ARR)))
 
 static const uint32_t TEST_PROGRAM[] = {
+	CSRRSI(0, 0x305, 0x10), // CSRRSI r0,mtvec,0x10
+	CSRRSI(0, 0x300, 0x08), // CSRRSI r0,mstatus,0x08
+	JAL(0, 12), // JAL r0,12
+	ADDI(15, 0, 0x0bd), // ADDI r15,r0,0x0bd
+	JAL(0, 0), // JAL r0,0
+	CSRRS(7, 0x300, 0), // CSRRS r7,mstatus,r0
+	CSRRS(8, 0x305, 0), // CSRRS r8,mtvec,r0
 	ADDI(1, 0, 0x11), // ADDI r1,r0,0x11
 	ADDI(2, 0, 0x31), // ADDI r2,r0,0x31
 	ADD(2, 1, 2), // ADD r2,r1,r2
@@ -68,12 +75,14 @@ public:
 			printf("  imm: 0x%x\n", (*this)->decode_imm);
 			printf("  alu_a_mux_position: 0x%x\n", (*this)->decode_alu_a_mux_position);
 			printf("  alu_b_mux_position: 0x%x\n", (*this)->decode_alu_b_mux_position);
+			printf("  csr_mux_position: 0x%x\n", (*this)->decode_csr_mux_position);
+			printf("  wb_pc_mux_position: 0x%x\n", (*this)->decode_wb_pc_mux_position);
 			printf("  wb_mux_position: 0x%x\n", (*this)->decode_wb_mux_position);
 			printf("  rd_rf_microcode: 0x%x\n", (*this)->decode_rd_rf_microcode);
 			printf("  ex_alu_microcode: 0x%x\n", (*this)->decode_ex_alu_microcode);
+			printf("  ex_csr_microcode: 0x%x\n", (*this)->decode_ex_csr_microcode);
 			printf("  ma_mem_microcode: 0x%x\n", (*this)->decode_ma_mem_microcode);
 			printf("  wb_rf_microcode : 0x%x\n", (*this)->decode_wb_rf_microcode);
-			printf("  wb_pc_microcode: 0x%x\n", (*this)->decode_wb_pc_microcode);
 		} else if ((*this)->stage == (1 << 2)) {
 			printf("Executing STAGE_READ\n");
 			printf("  read_data_a: 0x%x\n", (*this)->rf_read_data_a);
@@ -81,6 +90,7 @@ public:
 		} else if ((*this)->stage == (1 << 3)) {
 			printf("Executing STAGE_EXECUTE\n");
 			printf("  out: 0x%x\n", (*this)->alu_out);
+			printf("  csr_read_value: 0x%x\n", (*this)->csr_read_value);
 			printf("  next_pc: 0x%x\n", (*this)->pc_next_pc);
 		} else if ((*this)->stage == (1 << 4)) {
 			printf("Executing STAGE_MEMORY\n");

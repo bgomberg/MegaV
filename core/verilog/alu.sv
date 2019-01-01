@@ -3,8 +3,7 @@
 /*
  * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I/E instruction set.
  */
-module alu #(
-)(
+module alu(
     input clk, // Clock signal
     input [4:0] op, // Operation to be performed
     input [31:0] in_a, // Input data (bus A)

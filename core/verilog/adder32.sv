@@ -6,8 +6,7 @@
 /*
  * A 32 bit full adder.
  */
-module adder32 #(
-)(
+module adder32(
     input [31:0] a, // Input data
     input [31:0] b, // Input data
     input carry_in, // Carry in
