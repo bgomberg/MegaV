@@ -1,5 +1,3 @@
-#include <isa.h>
-
 #include <Vmodule.h>
 #include <Vmodule_core.h>
 #include <Vmodule_memory.h>
@@ -8,33 +6,6 @@
 #include <verilated.h>
 
 #include <stdio.h>
-
-
-#define ARRAY_LENGTH(ARR) ((sizeof(ARR)) / (sizeof(*ARR)))
-
-static const uint32_t TEST_PROGRAM[] = {
-	CSRRSI(0, 0x305, 0x10), // CSRRSI r0,mtvec,0x10
-	CSRRSI(0, 0x300, 0x08), // CSRRSI r0,mstatus,0x08
-	JAL(0, 12), // JAL r0,12
-	ADDI(15, 0, 0x0bd), // ADDI r15,r0,0x0bd
-	JAL(0, 0), // JAL r0,0
-	CSRRS(7, 0x300, 0), // CSRRS r7,mstatus,r0
-	CSRRS(8, 0x305, 0), // CSRRS r8,mtvec,r0
-	ADDI(1, 0, 0x11), // ADDI r1,r0,0x11
-	ADDI(2, 0, 0x31), // ADDI r2,r0,0x31
-	ADD(2, 1, 2), // ADD r2,r1,r2
-	ADD(3, 1, 2), // ADD r3,r1,r2
-	SW(3, 0, 0x80), // SW r3,r0,0x80
-	LW(4, 0, 0x80), // LW r4,r0,0x80
-	ADDI(5, 0, 0x100), // ADDI r5,r0,0x100
-	JAL(10, 8), // JAL r10,8
-	JAL(0, 0), // JAL r0,0
-	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
-	ADDI(5, 5, 0x01), // ADDI r5,r5,0x01
-	BEQ(0, 5, 20), // BEQ r0,r5,20
-	BEQ(0, 0, 4), // BEQ r0,r0,4
-	JAL(11, -20), // JAL r11,-20
-};
 
 
 class Core {
@@ -130,13 +101,39 @@ private:
 
 
 int main(int argc, char** argv) {
-	Verilated::commandArgs(argc, argv);
-	printf("\n");
+	if (argc != 2) {
+		fprintf(stderr, "Usage: %s <test_prog.bin>\n", argv[0]);
+		return -1;
+	}
+
+	// Open the test program file
+	FILE *f = fopen(argv[1], "r");
+
+	// Get the size of the test program
+	fseek(f, 0L, SEEK_END);
+	const size_t file_size = ftell(f);
+	rewind(f);
+	if (file_size % sizeof(uint32_t)) {
+		fclose(f);
+		fprintf(stderr, "Invalid test program binary length (%zu)\n", file_size);
+		return -1;
+	}
+
+	// Read the contents of the test program
+	uint32_t *program = (uint32_t *)malloc(file_size);
+	if (fread(program, file_size, 1, f) != 1) {
+		fclose(f);
+		fprintf(stderr, "Error reading file\n");
+		return -1;
+	}
+
+	// Close the file
+	fclose(f);
 
 	// Create our core object, reset it, and copy in the program
 	Core core;
 	core.reset();
-	memcpy(core->mem_module->fake_memory, TEST_PROGRAM, sizeof(TEST_PROGRAM));
+	memcpy(core->mem_module->fake_memory, program, file_size);
 	printf("\n");
 
 	// run until we enter an infinite loop
@@ -155,7 +152,7 @@ int main(int argc, char** argv) {
 	for (int i = 1; i < 16; i++) {
 		uint32_t value = core->rf_module->registers[i-1];
 		if (value) {
-			printf("  r%d = 0x%x\n", i, value);
+			printf("  x%d = 0x%x\n", i, value);
 		}
 	}
 	printf("Memory:\n");

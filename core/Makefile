@@ -17,8 +17,8 @@ VERILOG_SRC_FILES := \
 	verilog/csr.sv
 SIM_SRC_FILES := \
 	sim/sim_main.cpp
-SIM_HEADER_FILES := \
-	sim/isa.h
+SIM_HEADER_FILES :=
+SIM_TEST_PROG_SRC_FILE := sim/test_prog.S
 SBY_CONFIG_FILE := scripts/verify.sby
 YOSYS_SYNTH_SCRIPT_FILE = scripts/synth.ys
 YOSYS_GATES_SCRIPT_FILE = scripts/gates.ys
@@ -30,6 +30,7 @@ OUT_DIR := $(BUILD_DIR)/out
 GATES_PNG_OUT := $(OUT_DIR)/$(PROJECT_NAME).png
 GATES_JSON_OUT := $(OUT_DIR)/$(PROJECT_NAME).json
 SIM_EXE_OUT := $(OUT_DIR)/$(PROJECT_NAME).exe
+SIM_TEST_PROG_OUT := $(OUT_DIR)/test_prog.bin
 
 # Project configuration
 VERILATOR_MODULE_NAME := Vmodule
@@ -49,6 +50,9 @@ DOT := dot
 VERILATOR := verilator
 SBY := sby
 YOSYS := yosys
+RISCV_CC := riscv-none-embed-gcc
+RISCV_LD := riscv-none-embed-ld
+RISCV_OBJCOPY := riscv-none-embed-objcopy
 
 directories: $(OBJ_DIR) $(OUT_DIR)
 $(OBJ_DIR):
@@ -80,9 +84,9 @@ $(GATES_PNG_OUT): $(OBJ_DIR)/$(PROJECT_NAME).gates.png
 	@echo "Building $(notdir $@)"
 	@$(YOSYS) -q -f ilang -p "show -width -notitle -format dot -prefix $(basename $@)" $^
 
-build_sim: directories $(SIM_EXE_OUT)
+build_sim: directories $(SIM_EXE_OUT) $(SIM_TEST_PROG_OUT)
 run_sim: build_sim
-	@$(SIM_EXE_OUT)
+	@$(SIM_EXE_OUT) $(SIM_TEST_PROG_OUT)
 $(SIM_EXE_OUT): $(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe
 	@echo "Copying output $(notdir $@)"
 	@cp $< $@
@@ -90,6 +94,15 @@ $(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe: $(VERILOG_SRC_FILES) $(SIM_SRC_FILES) $
 	@echo "Building $(notdir $@)"
 	@$(VERILATOR) $(VERILATOR_ARGS) $(TOP_VERILOG_SRC_FILE) $(abspath $(SIM_SRC_FILES))
 	@$(MAKE) -s -C $(OBJ_DIR)/ -f $(VERILATOR_MODULE_NAME).mk
+$(SIM_TEST_PROG_OUT): $(OBJ_DIR)/test_prog.elf
+	@echo "Copying $(notdir $@)"
+	@$(RISCV_OBJCOPY) -O binary $< $@
+$(OBJ_DIR)/test_prog.elf: $(OBJ_DIR)/test_prog.o
+	@echo "Linking $(notdir $@)"
+	@$(RISCV_LD) -T sim/link.ld -nostartfiles $^ -o $@
+$(OBJ_DIR)/test_prog.o: $(SIM_TEST_PROG_SRC_FILE)
+	@echo "Compiling $(notdir $@)"
+	@$(RISCV_CC) -march=rv32e -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles $^ -o $@
 
 sby:
 	@$(SBY) -d $(OBJ_DIR)/sby -f $(SBY_CONFIG_FILE)
