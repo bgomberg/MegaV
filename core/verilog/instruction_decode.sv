@@ -1,5 +1,5 @@
 /*
- * A decoder for the RV32I instruction set (FENCE/ECALL/EBREAK/CSR* instructions are excluded).
+ * A decoder for the RV32I instruction set.
  */
 module instruction_decode(
     input clk, // Clock signal
@@ -12,7 +12,7 @@ module instruction_decode(
     output [9:0] rd_rf_microcode, // Read stage register file microcode
     output [5:0] ex_alu_microcode, // Execute stage ALU microcode
     output [4:0] ma_mem_microcode, // Memory access stage memory microcode
-    output [15:0] ex_csr_microcode, // Memory access stage CSR microcode
+    output [15:0] ex_csr_microcode, // Execute stage CSR microcode
     output [9:0] wb_rf_microcode, // Write back stage register file microcode
     output [1:0] wb_pc_mux_position, // Write back stage program counter microcode (00=npc, 01=I[31:1], 10=pc+offset, 11=Y?I+offset:npc)
     output fault // Fault condition (i.e. invalid instruction)

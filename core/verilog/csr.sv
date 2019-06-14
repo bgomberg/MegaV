@@ -71,7 +71,7 @@ module csr(
                     read_value <= {
                         24'b0, // reserved / unsupported
                         prior_interrupts_enabled, // MPIE (prior interrupt enable)
-                        3'b0,
+                        3'b0, // reserved / unsupported
                         interrupts_enabled, // MIE (interrupt enable)
                         3'b0 // reserved / unsupported
                     };

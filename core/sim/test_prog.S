@@ -3,6 +3,8 @@
 _start:
 	csrsi mtvec,0x10
 	csrsi mstatus,0x08
+	fence
+	fence.i
 	j l1
 	li a5,0x0bd
 	j .
