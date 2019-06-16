@@ -25,7 +25,7 @@ module program_counter(
     end
 
 `ifdef FORMAL
-    initial	assume(reset);
+    initial assume(reset);
     reg f_past_valid;
     initial f_past_valid = 0;
     always @(posedge clk) begin
@@ -34,7 +34,7 @@ module program_counter(
 
     /* Validate logic */
     always @(posedge clk) begin
-    	if (f_past_valid) begin
+        if (f_past_valid) begin
             if ($past(reset)) begin
                 assert(pc == 0);
                 assert(!fault);

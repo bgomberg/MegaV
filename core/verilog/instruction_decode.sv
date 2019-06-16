@@ -196,7 +196,7 @@ module instruction_decode(
     wire has_ex_stage = ex_alu_microcode[5] | ex_csr_microcode[15];
     wire has_ma_stage = ma_mem_microcode[4];
     always @(posedge clk) begin
-    	if (f_past_valid) begin
+        if (f_past_valid) begin
             case ($past(instr[6:0]))
                 7'b0110111: begin // LUI
                     assert($past(opcode_is_lui));

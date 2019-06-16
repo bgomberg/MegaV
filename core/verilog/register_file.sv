@@ -64,7 +64,7 @@ module register_file(
 
     /* Read path */
     always @(posedge clk) begin
-    	if (f_past_valid) begin
+        if (f_past_valid) begin
             if ($past(read_addr_a) == 0) begin
                 assert(read_data_a == 0);
             end else if ($past(read_addr_a) == f_read_addr_a) begin
@@ -73,7 +73,7 @@ module register_file(
                 end else begin
                     assert(read_data_a == f_read_data_a);
                 end
-        	end
+            end
             if ($past(read_addr_b) == 0) begin
                 assert(read_data_b == 0);
             end else if ($past(read_addr_b) == f_read_addr_b) begin
@@ -82,15 +82,15 @@ module register_file(
                 end else begin
                     assert(read_data_b == f_read_data_b);
                 end
-        	end
+            end
         end
     end
 
     /* Write path */
     always @(posedge clk) begin
-    	if (f_past_valid && $past(write_en) && ($past(write_addr) != 0) && ($past(write_addr) == f_write_addr)) begin
+        if (f_past_valid && $past(write_en) && ($past(write_addr) != 0) && ($past(write_addr) == f_write_addr)) begin
             assert(registers[$past(write_addr)] == $past(write_data));
-    	end
+        end
     end
 `endif
 

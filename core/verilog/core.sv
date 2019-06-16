@@ -171,7 +171,7 @@ module core(
     end
 
 `ifdef FORMAL
-    initial	assume(reset);
+    initial assume(reset);
     reg f_past_valid;
     initial f_past_valid = 0;
     always @(posedge clk) begin
@@ -180,7 +180,7 @@ module core(
 
     /* Validate Logic */
     always @(posedge clk) begin
-    	if (f_past_valid) begin
+        if (f_past_valid) begin
         end
     end
 `endif

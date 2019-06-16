@@ -70,7 +70,7 @@ module alu(
 
     /* Validate logic */
     always @(posedge clk) begin
-    	if (f_past_valid) begin
+        if (f_past_valid) begin
             case ($past(op))
                 5'b0000: begin // ADD
                     assert(!fault);

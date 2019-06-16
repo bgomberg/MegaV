@@ -132,7 +132,7 @@ module csr(
     end
 
 `ifdef FORMAL
-    initial	assume(reset);
+    initial assume(reset);
     initial interrupts_enabled = 1'b0;
     initial prior_interrupts_enabled = 1'b0;
     initial external_interrupt_enabled = 1'b0;

@@ -33,7 +33,7 @@ module adder32_sync(
 
     /* Validate logic */
     always @(posedge clk) begin
-    	if (f_past_valid) begin
+        if (f_past_valid) begin
             assert(out == ($past(a) + $past(b)));
         end
     end

@@ -70,7 +70,7 @@ module memory(
 
     /* Load path */
     always @(posedge clk) begin
-    	if (f_past_valid && $past(addr[7:0]) == f_read_addr) begin
+        if (f_past_valid && $past(addr[7:0]) == f_read_addr) begin
             case ($past(op))
                 3'b000: begin // LB
                     assert(!fault);
@@ -103,7 +103,7 @@ module memory(
 
     /* Store path */
     always @(posedge clk) begin
-    	if (f_past_valid && $past(addr[7:0]) == f_write_addr) begin
+        if (f_past_valid && $past(addr[7:0]) == f_write_addr) begin
             case ($past(op))
                 3'b100: begin // SB
                     assert(!fault && fake_memory[f_write_addr] == $past(in[7:0]));
