@@ -8,6 +8,26 @@
 #include <stdio.h>
 
 
+static const char * const REGISTER_NAMES[] = {
+	"zero",
+	"ra",
+	"sp",
+	"gp",
+	"tp",
+	"t0",
+	"t1",
+	"t2",
+	"s0/fp",
+	"s1",
+	"a0",
+	"a1",
+	"a2",
+	"a3",
+	"a4",
+	"a5",
+};
+
+
 class Core {
 public:
 	Core() : module_(new Vmodule()) {
@@ -152,7 +172,7 @@ int main(int argc, char** argv) {
 	for (int i = 1; i < 16; i++) {
 		uint32_t value = core->rf_module->registers[i-1];
 		if (value) {
-			printf("  x%d = 0x%x\n", i, value);
+			printf("  %s (x%d) = 0x%x\n", REGISTER_NAMES[i], i, value);
 		}
 	}
 	printf("Memory:\n");

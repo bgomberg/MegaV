@@ -97,9 +97,9 @@ $(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe: $(VERILOG_SRC_FILES) $(SIM_SRC_FILES) $
 $(SIM_TEST_PROG_OUT): $(OBJ_DIR)/test_prog.elf
 	@echo "Copying $(notdir $@)"
 	@$(RISCV_OBJCOPY) -O binary $< $@
-$(OBJ_DIR)/test_prog.elf: $(OBJ_DIR)/test_prog.o
+$(OBJ_DIR)/test_prog.elf: $(OBJ_DIR)/test_prog.o sim/link.ld
 	@echo "Linking $(notdir $@)"
-	@$(RISCV_LD) -T sim/link.ld -nostartfiles $^ -o $@
+	@$(RISCV_LD) -T sim/link.ld -nostartfiles $< -o $@
 $(OBJ_DIR)/test_prog.o: $(SIM_TEST_PROG_SRC_FILE)
 	@echo "Compiling $(notdir $@)"
 	@$(RISCV_CC) -march=rv32e -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles $^ -o $@

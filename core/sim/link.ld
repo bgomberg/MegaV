@@ -1,12 +1,42 @@
 OUTPUT_ARCH("riscv")
 
-ENTRY(_start)
+ENTRY(prog_entry)
+
+MEMORY
+{
+  PROG_ENTRY_ROM (rx) : ORIGIN = 0x00000000, LENGTH = 0x10
+  PROG_ROM (rx)       : ORIGIN = 0x00000010, LENGTH = 0x70
+  RAM (rw)            : ORIGIN = 0x00000080, LENGTH = 0x80
+}
 
 SECTIONS
 {
-	. = 0x00000000;
-	.text : {
-		*(.text)
-	}
-	_end = .;
+  .prog_entry : {
+    . = ALIGN(4);
+    *(.prog_entry)
+  } > PROG_ENTRY_ROM
+
+  .text : {
+    . = ALIGN(4);
+    *(.irq_handler)
+    *(.text)
+    *(.rodata)
+    . = ALIGN(4);
+  } > PROG_ROM
+
+  .data : {
+    . = ALIGN(4);
+    _data_start = .;
+    *(.data)
+    . = ALIGN(4);
+    _data_end = .;
+  } > RAM AT > PROG_ROM
+
+  .bss (NOLOAD) : {
+    . = ALIGN(4);
+    _bss_start = .;
+    *(.bss)
+    . = ALIGN(4);
+    _bss_end = .;
+  } > RAM
 }
