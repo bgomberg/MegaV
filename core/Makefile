@@ -14,7 +14,8 @@ VERILOG_SRC_FILES := \
 	verilog/adder4.sv \
 	verilog/adder32.sv \
 	verilog/adder32_sync.sv \
-	verilog/csr.sv
+	verilog/csr.sv \
+	verilog/fsm.sv
 SIM_SRC_FILES := \
 	sim/sim_main.cpp
 SIM_HEADER_FILES :=

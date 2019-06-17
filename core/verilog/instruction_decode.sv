@@ -9,7 +9,7 @@ module instruction_decode(
     output alu_b_mux_position, // Position of the ALU B mux (0=rs2, 1=imm)
     output csr_mux_position, // Position of the CSR mux (0=alu_in_a, 1=imm)
     output [1:0] wb_mux_position, // Position of the write back mux (0=alu_res, 1=imm, 2=mem_data, 3=npc)
-    output [9:0] rd_rf_microcode, // Read stage register file microcode
+    output [8:0] rd_rf_microcode, // Read stage register file microcode
     output [5:0] ex_alu_microcode, // Execute stage ALU microcode
     output [4:0] ma_mem_microcode, // Memory access stage memory microcode
     output [15:0] ex_csr_microcode, // Execute stage CSR microcode
@@ -24,7 +24,7 @@ module instruction_decode(
     reg alu_b_mux_position;
     reg csr_mux_position;
     reg [1:0] wb_mux_position;
-    reg [9:0] rd_rf_microcode;
+    reg [8:0] rd_rf_microcode;
     reg [5:0] ex_alu_microcode;
     reg [4:0] ma_mem_microcode;
     reg [15:0] ex_csr_microcode;
@@ -73,7 +73,6 @@ module instruction_decode(
     always @(posedge clk) begin
         rd_rf_microcode <= {
             rd_rf_enable,
-            1'b0,
             rs1[3:0],
             rs2[3:0]
         };
@@ -192,7 +191,7 @@ module instruction_decode(
                 opcode_is_system) == 1);
         end
     end
-    wire has_rd_stage = rd_rf_microcode[9];
+    wire has_rd_stage = rd_rf_microcode[8];
     wire has_ex_stage = ex_alu_microcode[5] | ex_csr_microcode[15];
     wire has_ma_stage = ma_mem_microcode[4];
     always @(posedge clk) begin
@@ -207,7 +206,6 @@ module instruction_decode(
                         assert(!has_rd_stage && !has_ex_stage && !has_ma_stage);
                         assert(imm == {$past(instr[31:12]), 12'b0});
                         assert(wb_mux_position == 2'b01);
-                        assert(rd_rf_microcode[9] == 1'b0);
                         assert(ex_alu_microcode[5] == 1'b0);
                         assert(ex_csr_microcode[15] == 1'b0);
                         assert(ma_mem_microcode[4] == 1'b0);
@@ -226,7 +224,6 @@ module instruction_decode(
                         assert(alu_a_mux_position == 1'b1);
                         assert(alu_b_mux_position == 1'b1);
                         assert(wb_mux_position == 2'b00);
-                        assert(rd_rf_microcode[9] == 1'b0);
                         assert(ex_alu_microcode == 6'b100000);
                         assert(ex_csr_microcode[15] == 1'b0);
                         assert(ma_mem_microcode[4] == 1'b0);
@@ -243,7 +240,6 @@ module instruction_decode(
                         assert(!has_rd_stage && !has_ex_stage && !has_ma_stage);
                         assert(imm == {{12{$past(instr[31])}}, $past(instr[19:12]), $past(instr[20]), $past(instr[30:21]), 1'b0});
                         assert(wb_mux_position == 2'b11);
-                        assert(rd_rf_microcode[9] == 1'b0);
                         assert(ex_alu_microcode[5] == 1'b0);
                         assert(ex_csr_microcode[15] == 1'b0);
                         assert(ma_mem_microcode[4] == 1'b0);
@@ -264,7 +260,7 @@ module instruction_decode(
                         assert(alu_a_mux_position == 1'b0);
                         assert(alu_b_mux_position == 1'b1);
                         assert(wb_mux_position == 2'b11);
-                        assert(rd_rf_microcode[9:4] == {2'b10, $past(instr[18:15])});
+                        assert(rd_rf_microcode[7:4] == $past(instr[18:15]));
                         assert(ex_alu_microcode == 6'b100000);
                         assert(ex_csr_microcode[15] == 1'b0);
                         assert(ma_mem_microcode[4] == 1'b0);
@@ -283,7 +279,7 @@ module instruction_decode(
                         assert(imm == {{20{$past(instr[31])}}, $past(instr[7]), $past(instr[30:25]), $past(instr[11:8]), 1'b0});
                         assert(alu_a_mux_position == 1'b0);
                         assert(alu_b_mux_position == 1'b0);
-                        assert(rd_rf_microcode == {2'b10, $past(instr[18:15]), $past(instr[23:20])});
+                        assert(rd_rf_microcode[7:0] == {$past(instr[18:15]), $past(instr[23:20])});
                         assert(ex_alu_microcode == {3'b110, $past(instr[14:12])});
                         assert(ex_csr_microcode[15] == 1'b0);
                         assert(ma_mem_microcode[4] == 1'b0);
@@ -304,7 +300,7 @@ module instruction_decode(
                         assert(alu_a_mux_position == 1'b0);
                         assert(alu_b_mux_position == 1'b1);
                         assert(wb_mux_position == 2'b10);
-                        assert(rd_rf_microcode[9:4] == {2'b10, $past(instr[18:15])});
+                        assert(rd_rf_microcode[7:4] == $past(instr[18:15]));
                         assert(ex_alu_microcode == 6'b100000);
                         assert(ex_csr_microcode[15] == 1'b0);
                         assert(ma_mem_microcode == {2'b10, $past(instr[14:12])});
@@ -323,7 +319,7 @@ module instruction_decode(
                         assert(imm == {{20{$past(instr[31])}}, $past(instr[31:25]), $past(instr[11:7])});
                         assert(alu_a_mux_position == 1'b0);
                         assert(alu_b_mux_position == 1'b1);
-                        assert(rd_rf_microcode == {2'b10, $past(instr[18:15]), $past(instr[23:20])});
+                        assert(rd_rf_microcode[7:0] == {$past(instr[18:15]), $past(instr[23:20])});
                         assert(ex_alu_microcode == 6'b100000);
                         assert(ex_csr_microcode[15] == 1'b0);
                         assert(ma_mem_microcode == {2'b11, $past(instr[14:12])});
@@ -345,7 +341,7 @@ module instruction_decode(
                         assert(alu_a_mux_position == 1'b0);
                         assert(alu_b_mux_position == 1'b1);
                         assert(wb_mux_position == 2'b00);
-                        assert(rd_rf_microcode[9:4] == {2'b10, $past(instr[18:15])});
+                        assert(rd_rf_microcode[7:4] == $past(instr[18:15]));
                         if ($past(instr[14:12]) == 3'b101) begin
                             assert(ex_alu_microcode == {2'b10, $past(instr[30]), $past(instr[14:12])});
                         end else begin
@@ -370,7 +366,7 @@ module instruction_decode(
                         assert(alu_a_mux_position == 1'b0);
                         assert(alu_b_mux_position == 1'b0);
                         assert(wb_mux_position == 2'b00);
-                        assert(rd_rf_microcode == {2'b10, $past(instr[18:15]), $past(instr[23:20])});
+                        assert(rd_rf_microcode[7:0] == {$past(instr[18:15]), $past(instr[23:20])});
                         assert(ex_alu_microcode == {2'b10, $past(instr[30]), $past(instr[14:12])});
                         assert(ex_csr_microcode[15] == 1'b0);
                         assert(ma_mem_microcode[4] == 1'b0);
@@ -395,7 +391,6 @@ module instruction_decode(
                     assert(fault == ($past(invalid_funct7) || $past(invalid_funct3) || $past(invalid_rs) || $past(invalid_rd)));
                     if (!fault) begin
                         assert(!has_rd_stage && !has_ex_stage && !has_ma_stage);
-                        assert(rd_rf_microcode[9] == 1'b0);
                         assert(ex_alu_microcode[5] == 1'b0);
                         assert(ex_csr_microcode[15] == 1'b0);
                         assert(ma_mem_microcode[4] == 1'b0);
@@ -416,7 +411,6 @@ module instruction_decode(
                             !$past(invalid_rs) && !$past(invalid_rd));
                         assert(!fault);
                         assert(!has_rd_stage && has_ex_stage && !has_ma_stage);
-                        assert(rd_rf_microcode[9] == 1'b0);
                         assert(ex_alu_microcode[5] == 1'b0);
                         assert(ex_csr_microcode == {1'b1, 8'b00000000, ~$past(instr[20]), 3'b011, 3'b000});
                         assert(ma_mem_microcode[4] == 1'b0);
@@ -434,7 +428,6 @@ module instruction_decode(
                             !$past(invalid_rs) && !$past(invalid_rd));
                         assert(!fault);
                         assert(!has_rd_stage && has_ex_stage && !has_ma_stage);
-                        assert(rd_rf_microcode[9] == 1'b0);
                         assert(ex_alu_microcode[5] == 1'b0);
                         assert(ex_csr_microcode[15] == 1'b1);
                         assert(ex_csr_microcode[2:0] == 3'b001);
@@ -465,12 +458,11 @@ module instruction_decode(
                             if ($past(instr[14])) begin
                                 // immediate
                                 assert(!has_rd_stage);
-                                assert(rd_rf_microcode[9] == 1'b0);
                                 assert(csr_mux_position == 1'b1);
                             end else begin
                                 // register
                                 assert(has_rd_stage);
-                                assert(rd_rf_microcode[9:4] == {2'b10, $past(instr[18:15])});
+                                assert(rd_rf_microcode[7:4] == $past(instr[18:15]));
                                 assert(csr_mux_position == 1'b0);
                             end
                             assert(ex_alu_microcode[5] == 1'b0);
