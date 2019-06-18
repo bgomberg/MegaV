@@ -52,12 +52,12 @@ module core(
         pc_in,
         pc_pc,
         pc_fault);
-    adder32_sync offset_pc_adder_module(
-        clk & stage_is_execute,
+    adder32_sync next_pc_adder_module(
+        clk & stage_is_decode,
         pc_pc,
         32'd4,
         pc_next_pc);
-    adder32_sync next_pc_adder_module(
+    adder32_sync offset_pc_adder_module(
         clk & stage_is_execute,
         pc_pc,
         decode_imm,
@@ -80,7 +80,7 @@ module core(
     wire [31:0] decode_imm /* verilator public */;
     wire decode_alu_a_mux_position /* verilator public */;
     wire decode_alu_b_mux_position /* verilator public */;
-    wire decode_csr_mux_position /* verilator public */;
+    wire [1:0] decode_csr_mux_position /* verilator public */;
     wire [1:0] decode_wb_mux_position /* verilator public */;
     wire [7:0] decode_rd_rf_microcode /* verilator public */;
     /* verilator lint_off UNOPT */
@@ -139,12 +139,16 @@ module core(
 
     wire [31:0] csr_read_value /* verilator public */;
     wire csr_fault;
+    wire [31:0] csr_in /* verilator public */ = (decode_csr_mux_position == 2'b00) ? rf_read_data_a : (
+        (decode_csr_mux_position == 2'b01) ? decode_imm : (
+        (decode_csr_mux_position == 2'b10) ? pc_next_pc :
+        32'b0));
     csr csr_module(
         clk & (reset | (stage_is_execute & decode_ex_csr_microcode[15])),
         reset,
         decode_ex_csr_microcode[2:0],
         decode_ex_csr_microcode[14:3],
-        decode_csr_mux_position ? decode_imm : alu_in_a,
+        csr_in,
         csr_read_value,
         csr_fault
     );

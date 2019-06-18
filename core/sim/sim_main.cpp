@@ -82,6 +82,7 @@ public:
 			printf("Executing STAGE_EXECUTE\n");
 			printf("  out: 0x%x\n", (*this)->alu_out);
 			printf("  csr_read_value: 0x%x\n", (*this)->csr_read_value);
+			printf("  csr_in: 0x%x\n", (*this)->csr_in);
 			printf("  next_pc: 0x%x\n", (*this)->pc_next_pc);
 		} else if ((*this)->stage_is_memory) {
 			printf("Executing STAGE_MEMORY\n");

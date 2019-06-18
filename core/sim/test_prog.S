@@ -6,12 +6,18 @@ prog_entry:
 .section .irq_handler
 irq_handler:
   # Handle the interrupt
+  csrr s0, mcause
+  li s1, 0xb
+  beq s0, s1, irq_handler_ecall
+  # Default handler
   j .
+
+irq_handler_ecall:
+  mret
 
 .section .text
 main:
-  # Set the stack pointer
-  csrsi mtvec,0x10
+  # Enable interrupts
   csrsi mstatus,0x08
   fence
   fence.i
@@ -34,6 +40,7 @@ l1:
 
 l2:
   ecall
+  ebreak
 
 l3:
   addi  a2, a2, 0x01
