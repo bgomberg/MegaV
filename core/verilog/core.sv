@@ -17,25 +17,17 @@ module core(
 );
 
     /* FSM */
-    wire stage_is_fetch /* verilator public */;
-    wire stage_is_decode /* verilator public */;
-    wire stage_is_read /* verilator public */;
-    wire stage_is_execute /* verilator public */;
-    wire stage_is_memory /* verilator public */;
-    wire stage_is_write_back /* verilator public */;
-    wire decode_rd_rf_enabled;
-    wire decode_ma_mem_enabled;
+    wire [`NUM_STAGES-1:0] stage_active /* verilator public */;
+    wire [`NUM_STAGES-1:0] enabled_stages;
+    assign enabled_stages[`STAGE_FETCH] = 1'b1;
+    assign enabled_stages[`STAGE_DECODE] = 1'b1;
+    assign enabled_stages[`STAGE_EXECUTE] = 1'b1;
+    assign enabled_stages[`STAGE_WRITE_BACK] = 1'b1;
     fsm fsm_module(
         clk,
         reset,
-        decode_rd_rf_enabled,
-        decode_ma_mem_enabled,
-        stage_is_fetch,
-        stage_is_decode,
-        stage_is_read,
-        stage_is_execute,
-        stage_is_memory,
-        stage_is_write_back);
+        enabled_stages,
+        stage_active);
 
     /* Program counter */
     wire [31:0] pc_pc /* verilator public */;
@@ -47,18 +39,18 @@ module core(
         (decode_wb_pc_mux_position == 2'b10) ? pc_offset_pc : (
         (decode_wb_pc_mux_position == 2'b11) ? (alu_out[0] ? pc_offset_pc : pc_next_pc) : 32'b0)));
     program_counter pc_module(
-        clk & (reset | stage_is_write_back),
+        clk & (reset | stage_active[`STAGE_WRITE_BACK]),
         reset,
         pc_in,
         pc_pc,
         pc_fault);
     adder32_sync next_pc_adder_module(
-        clk & stage_is_decode,
+        clk & stage_active[`STAGE_DECODE],
         pc_pc,
         32'd4,
         pc_next_pc);
     adder32_sync offset_pc_adder_module(
-        clk & stage_is_execute,
+        clk & stage_active[`STAGE_EXECUTE],
         pc_pc,
         decode_imm,
         pc_offset_pc);
@@ -67,11 +59,11 @@ module core(
     wire [31:0] mem_out /* verilator public */;
     wire mem_fault;
     memory mem_module(
-        clk & (stage_is_fetch | stage_is_memory),
-        // op needs to be set to b010 and stable before fetch stage starts (and remain stable during the fetch stage)
-        (stage_is_write_back | stage_is_fetch) ? 3'b010 : {decode_ma_mem_microcode[3], decode_ma_mem_microcode[1:0]},
-        // address needs to be set to the PC and stable before fetch stage starts (and remain stable during the fetch stage)
-        (stage_is_write_back | stage_is_fetch) ? pc_pc : alu_out,
+        clk & (stage_active[`STAGE_FETCH] | stage_active[`STAGE_MEMORY]),
+        // op needs to be set to b010 and stable before fetch stage_active starts (and remain stable during the fetch stage_active)
+        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? 3'b010 : {decode_ma_mem_microcode[3], decode_ma_mem_microcode[1:0]},
+        // address needs to be set to the PC and stable before fetch stage_active starts (and remain stable during the fetch stage_active)
+        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? pc_pc : alu_out,
         rf_read_data_b,
         mem_out,
         mem_fault);
@@ -92,16 +84,16 @@ module core(
     wire [1:0] decode_wb_pc_mux_position /* verilator public */;
     wire decode_fault;
     instruction_decode decode_module(
-        clk & stage_is_decode,
+        clk & stage_active[`STAGE_DECODE],
         mem_out,
         decode_imm,
         decode_alu_a_mux_position,
         decode_alu_b_mux_position,
         decode_csr_mux_position,
         decode_wb_mux_position,
-        {decode_rd_rf_enabled, decode_rd_rf_microcode},
+        {enabled_stages[`STAGE_READ], decode_rd_rf_microcode},
         decode_ex_alu_microcode,
-        {decode_ma_mem_enabled, decode_ma_mem_microcode},
+        {enabled_stages[`STAGE_MEMORY], decode_ma_mem_microcode},
         decode_ex_csr_microcode,
         decode_wb_rf_microcode,
         decode_wb_pc_mux_position,
@@ -116,8 +108,8 @@ module core(
     wire [31:0] rf_read_data_a /* verilator public */;
     wire [31:0] rf_read_data_b /* verilator public */;
     register_file rf_module(
-        clk & (((stage_is_read & decode_rd_rf_enabled) | (stage_is_write_back & decode_wb_rf_microcode[9]))),
-        ~stage_is_read & decode_wb_rf_microcode[8],
+        clk & (((stage_active[`STAGE_READ]) | (stage_active[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[9]))),
+        ~stage_active[`STAGE_READ] & decode_wb_rf_microcode[8],
         decode_wb_rf_microcode[7:4],
         rf_write_data,
         decode_rd_rf_microcode[7:4],
@@ -130,7 +122,7 @@ module core(
     wire alu_fault;
     wire [31:0] alu_in_a = decode_alu_a_mux_position ? pc_pc : rf_read_data_a;
     alu alu_module(
-        clk & (stage_is_execute & decode_ex_alu_microcode[5]),
+        clk & (stage_active[`STAGE_EXECUTE] & decode_ex_alu_microcode[5]),
         decode_ex_alu_microcode[4:0],
         alu_in_a,
         decode_alu_b_mux_position ? decode_imm : rf_read_data_b,
@@ -144,7 +136,7 @@ module core(
         (decode_csr_mux_position == 2'b10) ? pc_next_pc :
         32'b0));
     csr csr_module(
-        clk & (reset | (stage_is_execute & decode_ex_csr_microcode[15])),
+        clk & (reset | (stage_active[`STAGE_EXECUTE] & decode_ex_csr_microcode[15])),
         reset,
         decode_ex_csr_microcode[2:0],
         decode_ex_csr_microcode[14:3],

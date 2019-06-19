@@ -57,11 +57,11 @@ public:
 	void step() {
 		// Move forward one clock cycle
 		tick();
-		if ((*this)->stage_is_fetch) {
+		if ((*this)->stage_active == (1 << 0)) {
 			printf("Executing STAGE_FETCH\n");
 			printf("  pc: 0x%x\n", (*this)->pc_pc);
 			printf("  instr: 0x%x\n", (*this)->mem_out);
-		} else if ((*this)->stage_is_decode) {
+		} else if ((*this)->stage_active == (1 << 1)) {
 			printf("Executing STAGE_DECODE\n");
 			printf("  imm: 0x%x\n", (*this)->decode_imm);
 			printf("  alu_a_mux_position: 0x%x\n", (*this)->decode_alu_a_mux_position);
@@ -74,24 +74,24 @@ public:
 			printf("  ex_csr_microcode: 0x%x\n", (*this)->decode_ex_csr_microcode);
 			printf("  ma_mem_microcode: 0x%x\n", (*this)->decode_ma_mem_microcode);
 			printf("  wb_rf_microcode : 0x%x\n", (*this)->decode_wb_rf_microcode);
-		} else if ((*this)->stage_is_read) {
+		} else if ((*this)->stage_active == (1 << 2)) {
 			printf("Executing STAGE_READ\n");
 			printf("  read_data_a: 0x%x\n", (*this)->rf_read_data_a);
 			printf("  read_data_b: 0x%x\n", (*this)->rf_read_data_b);
-		} else if ((*this)->stage_is_execute) {
+		} else if ((*this)->stage_active == (1 << 3)) {
 			printf("Executing STAGE_EXECUTE\n");
 			printf("  out: 0x%x\n", (*this)->alu_out);
 			printf("  csr_read_value: 0x%x\n", (*this)->csr_read_value);
 			printf("  csr_in: 0x%x\n", (*this)->csr_in);
 			printf("  next_pc: 0x%x\n", (*this)->pc_next_pc);
-		} else if ((*this)->stage_is_memory) {
+		} else if ((*this)->stage_active == (1 << 4)) {
 			printf("Executing STAGE_MEMORY\n");
-		} else if ((*this)->stage_is_write_back) {
+		} else if ((*this)->stage_active == (1 << 5)) {
 			printf("Executing STAGE_WRITE_BACK\n");
 			printf("  write_data: 0x%x\n", (*this)->rf_write_data);
 			printf("  next_pc: 0x%x\n", (*this)->pc_next_pc);
 		} else {
-			printf("!!! UNKNOWN STAGE\n");
+			printf("!!! UNKNOWN stage\n");
 		}
 
 		// Check for faults
@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
 	while (core->pc_pc != prev_pc) {
 		prev_pc = core->pc_pc;
 		core.step();
-		while (!core->stage_is_write_back) {
+		while (core->stage_active != (1 << 5)) {
 			core.step();
 		}
 		printf("\n");

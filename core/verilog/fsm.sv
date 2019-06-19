@@ -8,36 +8,34 @@
 `define STAGE_EXECUTE 3
 `define STAGE_MEMORY 4
 `define STAGE_WRITE_BACK 5
+`define NUM_STAGES 6
 
 module fsm(
     input clk, // Clock signal
     input reset, // Reset signal
-    input read_stage_enable, // Read stage enable
-    input mem_stage_enable, // Memory stage enable
-    output stage_is_fetch, // Fetch stage
-    output stage_is_decode, // Decode stage
-    output stage_is_read, // Read stage
-    output stage_is_execute, // Execute stage
-    output stage_is_memory, // Memory stage
-    output stage_is_write_back // Write back stage
+    /* verilator lint_off UNUSED */
+    input [`NUM_STAGES-1:0] stage_enabled, // Enabled stages
+    /* verilator lint_on UNUSED */
+    output [`NUM_STAGES-1:0] stage_active // Current stage
 );
 
+    /* Outputs */
+    reg [`NUM_STAGES-1:0] stage_active;
+
     /* Logic */
-    reg [5:0] current_stage;
+    reg [`NUM_STAGES-1:0] current_stage;
+    wire [`NUM_STAGES-1:0] next_stage = {current_stage[`NUM_STAGES-2:0], current_stage[`NUM_STAGES-1]};
+    wire [`NUM_STAGES-1:0] next_next_stage = {next_stage[`NUM_STAGES-2:0], next_stage[`NUM_STAGES-1]};
     always @(posedge clk) begin
         if (reset) begin
-            current_stage <= 1 << `STAGE_WRITE_BACK;
-        end else if (current_stage[`STAGE_DECODE] & ~read_stage_enable) begin
-            // no register read so skip to execute
-            current_stage <= 1 << `STAGE_EXECUTE;
-        end else if (current_stage[`STAGE_EXECUTE] & ~mem_stage_enable) begin
-            // no memory access so skip to write back
-            current_stage <= 1 << `STAGE_WRITE_BACK;
+            current_stage <= 1 << (`NUM_STAGES - 1);
+        end else if ((next_stage & stage_enabled) != `NUM_STAGES'b0) begin
+            current_stage <= next_stage;
         end else begin
-            current_stage <= {current_stage[4:0], current_stage[5]};
+            current_stage <= next_next_stage;
         end
     end
-    assign {stage_is_write_back, stage_is_memory, stage_is_execute, stage_is_read, stage_is_decode, stage_is_fetch} = current_stage;
+    assign stage_active = current_stage;
 
 `ifdef FORMAL
     initial assume(reset);
@@ -49,72 +47,36 @@ module fsm(
 
     /* Validate logic */
     always @(posedge clk) begin
+        assume($past(stage_enabled) & 6'b101011 == 6'b101011);
         if (f_past_valid) begin
             if ($past(reset)) begin
-                assert(!stage_is_fetch);
-                assert(!stage_is_decode);
-                assert(!stage_is_read);
-                assert(!stage_is_execute);
-                assert(!stage_is_memory);
-                assert(stage_is_write_back);
+                assert(stage_active == (1 << (`NUM_STAGES - 1)));
             end else if ($past(current_stage) == (1 << `STAGE_FETCH)) begin
                 // fetch -> decode
-                assert(!stage_is_fetch);
-                assert(stage_is_decode);
-                assert(!stage_is_read);
-                assert(!stage_is_execute);
-                assert(!stage_is_memory);
-                assert(!stage_is_write_back);
+                assert(stage_active == (1 << `STAGE_DECODE));
             end else if ($past(current_stage) == (1 << `STAGE_DECODE)) begin
                 // decode -> read / execute
-                assert(!stage_is_fetch);
-                assert(!stage_is_decode);
-                assert(!stage_is_memory);
-                assert(!stage_is_write_back);
-                if ($past(read_stage_enable)) begin
-                    assert(stage_is_read);
-                    assert(!stage_is_execute);
+                if ($past(stage_enabled[`STAGE_READ])) begin
+                    assert(stage_active == (1 << `STAGE_READ));
                 end else begin
-                    assert(!stage_is_read);
-                    assert(stage_is_execute);
+                    assert(stage_active == (1 << `STAGE_EXECUTE));
                 end
             end else if ($past(current_stage) == (1 << `STAGE_READ)) begin
                 // read -> execute
-                assert(!stage_is_fetch);
-                assert(!stage_is_decode);
-                assert(!stage_is_read);
-                assert(stage_is_execute);
-                assert(!stage_is_memory);
-                assert(!stage_is_write_back);
+                assert(stage_active == (1 << `STAGE_EXECUTE));
             end else if ($past(current_stage) == (1 << `STAGE_EXECUTE)) begin
                 // execute -> memory / write back
-                assert(!stage_is_fetch);
-                assert(!stage_is_decode);
-                assert(!stage_is_read);
-                assert(!stage_is_execute);
-                if ($past(mem_stage_enable)) begin
-                    assert(stage_is_memory);
-                    assert(!stage_is_write_back);
+                if ($past(stage_enabled[`STAGE_MEMORY])) begin
+                    assert(stage_active == (1 << `STAGE_MEMORY));
                 end else begin
-                    assert(!stage_is_memory);
-                    assert(stage_is_write_back);
+                    assert(stage_active == (1 << `STAGE_WRITE_BACK));
                 end
             end else if ($past(current_stage) == (1 << `STAGE_MEMORY)) begin
                 // memory -> write back
-                assert(!stage_is_fetch);
-                assert(!stage_is_decode);
-                assert(!stage_is_read);
-                assert(!stage_is_execute);
-                assert(!stage_is_memory);
-                assert(stage_is_write_back);
+                assert(stage_active == (1 << `STAGE_WRITE_BACK));
             end else if ($past(current_stage) == (1 << `STAGE_WRITE_BACK)) begin
                 // write back -> fetch
-                assert(stage_is_fetch);
-                assert(!stage_is_decode);
-                assert(!stage_is_read);
-                assert(!stage_is_execute);
-                assert(!stage_is_memory);
-                assert(!stage_is_write_back);
+                assert(stage_active == (1 << `STAGE_FETCH));
             end else begin
                 assert(0);
             end
