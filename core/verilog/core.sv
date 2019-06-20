@@ -17,7 +17,9 @@ module core(
 );
 
     /* FSM */
+    /* verilator lint_off UNOPT */
     wire [`NUM_STAGES-1:0] stage_active /* verilator public */;
+    /* verilator lint_on UNOPT */
     wire [`NUM_STAGES-1:0] enabled_stages;
     assign enabled_stages[`STAGE_FETCH] = 1'b1;
     assign enabled_stages[`STAGE_DECODE] = 1'b1;
@@ -60,9 +62,11 @@ module core(
     wire mem_fault;
     memory mem_module(
         clk & (stage_active[`STAGE_FETCH] | stage_active[`STAGE_MEMORY]),
-        // op needs to be set to b010 and stable before fetch stage_active starts (and remain stable during the fetch stage_active)
-        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? 3'b010 : {decode_ma_mem_microcode[3], decode_ma_mem_microcode[1:0]},
-        // address needs to be set to the PC and stable before fetch stage_active starts (and remain stable during the fetch stage_active)
+        // op needs to be set to b010 and stable before fetch stage starts (and remain stable during the fetch stage)
+        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? 1'b0 : decode_ma_mem_microcode[3],
+        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? 1'b0 : decode_ma_mem_microcode[2],
+        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? 2'b10 : decode_ma_mem_microcode[1:0],
+        // address needs to be set to the PC and stable before fetch stage starts (and remain stable during the fetch stage)
         (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? pc_pc : alu_out,
         rf_read_data_b,
         mem_out,
@@ -80,7 +84,9 @@ module core(
     wire [15:0] decode_ex_csr_microcode /* verilator public */;
     /* verilator lint_on UNOPT */
     wire [3:0] decode_ma_mem_microcode /* verilator public */;
+    /* verilator lint_off UNOPT */
     wire [9:0] decode_wb_rf_microcode /* verilator public */;
+    /* verilator lint_on UNOPT */
     wire [1:0] decode_wb_pc_mux_position /* verilator public */;
     wire decode_fault;
     instruction_decode decode_module(
