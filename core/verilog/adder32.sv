@@ -13,6 +13,8 @@ module adder32(
     output [31:0] sum // Result
 );
 
+    wire [31:0] a_xor_b = a ^ b;
+    wire [31:0] a_and_b = a & b;
     wire carry_0;
     wire carry_1;
     wire carry_2;
@@ -23,14 +25,14 @@ module adder32(
     /* verilator lint_off UNUSED */
     wire carry_7;
     /* verilator lint_on UNUSED */
-    adder4 adder0(a[3:0], b[3:0], carry_in, sum[3:0], carry_0);
-    adder4 adder1(a[7:4], b[7:4], carry_0, sum[7:4], carry_1);
-    adder4 adder2(a[11:8], b[11:8], carry_1, sum[11:8], carry_2);
-    adder4 adder3(a[15:12], b[15:12], carry_2, sum[15:12], carry_3);
-    adder4 adder4(a[19:16], b[19:16], carry_3, sum[19:16], carry_4);
-    adder4 adder5(a[23:20], b[23:20], carry_4, sum[23:20], carry_5);
-    adder4 adder6(a[27:24], b[27:24], carry_5, sum[27:24], carry_6);
-    adder4 adder7(a[31:28], b[31:28], carry_6, sum[31:28], carry_7);
+    adder4 adder0(a_xor_b[3:0], a_and_b[3:0], carry_in, sum[3:0], carry_0);
+    adder4 adder1(a_xor_b[7:4], a_and_b[7:4], carry_0, sum[7:4], carry_1);
+    adder4 adder2(a_xor_b[11:8], a_and_b[11:8], carry_1, sum[11:8], carry_2);
+    adder4 adder3(a_xor_b[15:12], a_and_b[15:12], carry_2, sum[15:12], carry_3);
+    adder4 adder4(a_xor_b[19:16], a_and_b[19:16], carry_3, sum[19:16], carry_4);
+    adder4 adder5(a_xor_b[23:20], a_and_b[23:20], carry_4, sum[23:20], carry_5);
+    adder4 adder6(a_xor_b[27:24], a_and_b[27:24], carry_5, sum[27:24], carry_6);
+    adder4 adder7(a_xor_b[31:28], a_and_b[31:28], carry_6, sum[31:28], carry_7);
 
 `ifdef FORMAL
     /* Validate logic */
