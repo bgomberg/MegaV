@@ -17,8 +17,10 @@ VERILOG_SRC_FILES := \
 	verilog/csr.sv \
 	verilog/fsm.sv
 SIM_SRC_FILES := \
-	sim/sim_main.cpp
-SIM_HEADER_FILES :=
+	sim/sim_main.cpp \
+	sim/mem.cpp
+SIM_HEADER_FILES := \
+	sim/mem.h
 SIM_TEST_PROG_SRC_FILE := sim/test_prog.S
 SBY_CONFIG_FILE := scripts/verify.sby
 YOSYS_SYNTH_SCRIPT_FILE = scripts/synth.ys

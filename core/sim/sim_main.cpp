@@ -1,3 +1,5 @@
+#include "mem.h"
+
 #include <Vmodule.h>
 #include <Vmodule_core.h>
 #include <Vmodule_memory.h>
@@ -26,8 +28,6 @@ static const char * const REGISTER_NAMES[] = {
 	"a4",
 	"a5",
 };
-static uint8_t m_flash[0xC0];
-static uint8_t m_ram[0x40];
 
 
 class Core {
@@ -57,8 +57,11 @@ public:
 	}
 
 	void step() {
-		// Move forward one clock cycle
-		tick();
+		// Move forward one stage
+		const uint8_t prev_stage = (*this)->stage_active;
+		while ((*this)->stage_active == prev_stage) {
+			tick();
+		}
 		if ((*this)->stage_active == (1 << 0)) {
 			printf("Executing STAGE_FETCH\n");
 			printf("  pc: 0x%x\n", (*this)->pc_pc);
@@ -88,19 +91,13 @@ public:
 			printf("  next_pc: 0x%x\n", (*this)->pc_next_pc);
 		} else if ((*this)->stage_active == (1 << 4)) {
 			printf("Executing STAGE_MEMORY\n");
-			printf("  out: 0x%x\n", (*this)->mem_module->out);
+			printf("  out: 0x%x\n", (*this)->mem_out);
 		} else if ((*this)->stage_active == (1 << 5)) {
 			printf("Executing STAGE_WRITE_BACK\n");
 			printf("  write_data: 0x%x\n", (*this)->rf_write_data);
 			printf("  next_pc: 0x%x\n", (*this)->pc_next_pc);
 		} else {
 			printf("!!! UNKNOWN stage\n");
-		}
-
-		// Check for faults
-		if (module_->fault) {
-			printf("!!! FAULT\n");
-			exit(1);
 		}
 	}
 
@@ -137,11 +134,6 @@ int main(int argc, char** argv) {
 	fseek(f, 0L, SEEK_END);
 	const size_t file_size = ftell(f);
 	rewind(f);
-	if (file_size % sizeof(uint32_t) || file_size > sizeof(m_flash)) {
-		fclose(f);
-		fprintf(stderr, "Invalid test program binary length (%zu)\n", file_size);
-		return -1;
-	}
 
 	// Read the contents of the test program
 	uint32_t *program = (uint32_t *)malloc(file_size);
@@ -157,7 +149,7 @@ int main(int argc, char** argv) {
 	// Create our core object, reset it, and copy in the program
 	Core core;
 	core.reset();
-	memcpy(m_flash, program, file_size);
+	mem_load_flash(program, file_size);
 	printf("\n");
 
 	// run until we enter an infinite loop
@@ -179,66 +171,7 @@ int main(int argc, char** argv) {
 			printf("  %s (x%d) = 0x%x\n", REGISTER_NAMES[i], i, value);
 		}
 	}
-	printf("Memory:\n");
-	for (int i = 0xC0; i < 0x100; i += 4) {
-		uint32_t value;
-		memcpy(&value, &m_ram[i-0xC0], sizeof(value));
-		if (value) {
-			printf("  [0x%x] = 0x%x\n", i, value);
-		}
-	}
+	mem_dump_ram();
 
 	return 0;
-}
-
-static uint8_t mem_read_byte(int addr) {
-	if (addr >= 0 && addr < 0xC0) {
-		return m_flash[addr];
-	} else if (addr >= 0xC0 && addr < 0x100) {
-		return m_ram[addr-0xC0];
-	} else {
-		printf("!!! Invalid read addr\n");
-		exit(1);
-	}
-}
-
-int mem_read(int addr, svBit is_unsigned, svBit op_1, svBit op_0) {
-	uint32_t result = mem_read_byte(addr);
-	if (op_0 || op_1) {
-		result |= (mem_read_byte(addr + 1) << 8);
-	}
-	if (op_1) {
-		result |= (mem_read_byte(addr + 2) << 16);
-		result |= (mem_read_byte(addr + 3) << 24);
-	}
-	if (op_1 == 0 && op_0 == 0) {
-		if (!is_unsigned && (result & 0x80)) {
-			result |= 0xFFFFFF00;
-		}
-	} else if (op_1 == 0 && op_0 == 1) {
-		if (!is_unsigned && (result & 0x8000)) {
-			result |= 0xFFFF0000;
-		}
-	}
-	return (int)result;
-}
-
-void mem_write_byte(int addr, char data) {
-	if (addr >= 0xC0 && addr < 0x100) {
-		m_ram[addr-0xC0] = data;
-	} else {
-		printf("!!! Invalid write addr\n");
-		exit(1);
-	}
-}
-
-void mem_write(int addr, int data, svBit op_1, svBit op_0) {
-	mem_write_byte(addr, data & 0xff);
-	if (op_0 || op_1) {
-		mem_write_byte(addr + 1, (data >> 8) & 0xff);
-	}
-	if (op_1) {
-		mem_write_byte(addr + 2, (data >> 16) & 0xff);
-		mem_write_byte(addr + 3, (data >> 24) & 0xff);
-	}
 }

@@ -17,6 +17,13 @@ module core(
 );
 
     /* FSM */
+    wire [`NUM_STAGES-1:0] stage_done;
+    assign stage_done[`STAGE_FETCH] = ~mem_busy;
+    assign stage_done[`STAGE_DECODE] = 1'b1;
+    assign stage_done[`STAGE_READ] = 1'b1;
+    assign stage_done[`STAGE_EXECUTE] = 1'b1;
+    assign stage_done[`STAGE_MEMORY] = ~mem_busy;
+    assign stage_done[`STAGE_WRITE_BACK] = 1'b1;
     /* verilator lint_off UNOPT */
     wire [`NUM_STAGES-1:0] stage_active /* verilator public */;
     /* verilator lint_on UNOPT */
@@ -29,6 +36,7 @@ module core(
         clk,
         reset,
         enabled_stages,
+        stage_done,
         stage_active);
 
     /* Program counter */
@@ -59,17 +67,19 @@ module core(
 
     /* Memory */
     wire [31:0] mem_out /* verilator public */;
+    wire mem_busy;
     wire mem_fault;
     memory mem_module(
-        clk & (stage_active[`STAGE_FETCH] | stage_active[`STAGE_MEMORY]),
-        // op needs to be set to b010 and stable before fetch stage starts (and remain stable during the fetch stage)
-        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? 1'b0 : decode_ma_mem_microcode[3],
-        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? 1'b0 : decode_ma_mem_microcode[2],
-        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? 2'b10 : decode_ma_mem_microcode[1:0],
-        // address needs to be set to the PC and stable before fetch stage starts (and remain stable during the fetch stage)
-        (stage_active[`STAGE_WRITE_BACK] | stage_active[`STAGE_FETCH]) ? pc_pc : alu_out,
+        clk,
+        reset,
+        (stage_active[`STAGE_FETCH] | stage_active[`STAGE_MEMORY]),
+        stage_active[`STAGE_FETCH] ? 1'b0 : decode_ma_mem_microcode[3],
+        stage_active[`STAGE_FETCH] ? 1'b0 : decode_ma_mem_microcode[2],
+        stage_active[`STAGE_FETCH] ? 2'b10 : decode_ma_mem_microcode[1:0],
+        stage_active[`STAGE_FETCH] ? pc_pc : alu_out,
         rf_read_data_b,
         mem_out,
+        mem_busy,
         mem_fault);
 
     /* Instruction decode */
