@@ -21,7 +21,7 @@ module core(
     assign stage_done[`STAGE_FETCH] = ~mem_busy;
     assign stage_done[`STAGE_DECODE] = 1'b1;
     assign stage_done[`STAGE_READ] = 1'b1;
-    assign stage_done[`STAGE_EXECUTE] = 1'b1;
+    assign stage_done[`STAGE_EXECUTE] = ~alu_busy;
     assign stage_done[`STAGE_MEMORY] = ~mem_busy;
     assign stage_done[`STAGE_WRITE_BACK] = 1'b1;
     /* verilator lint_off UNOPT */
@@ -137,12 +137,16 @@ module core(
     wire [31:0] alu_out /* verilator public */;
     wire alu_fault;
     wire [31:0] alu_in_a = decode_alu_a_mux_position ? pc_pc : rf_read_data_a;
+    wire alu_busy;
     alu alu_module(
-        clk & (stage_active[`STAGE_EXECUTE] & decode_ex_alu_microcode[5]),
+        clk,
+        reset,
+        stage_active[`STAGE_EXECUTE] & decode_ex_alu_microcode[5],
         decode_ex_alu_microcode[4:0],
         alu_in_a,
         decode_alu_b_mux_position ? decode_imm : rf_read_data_b,
         alu_out,
+        alu_busy,
         alu_fault);
 
     wire [31:0] csr_read_value /* verilator public */;
