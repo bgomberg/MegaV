@@ -103,7 +103,7 @@ module memory(
             if ($past(reset)) begin
                 assert(!busy);
                 assert(!fault);
-            end else if ($past(available)) begin
+            end else if ($past(available) && !busy) begin
                 case ($past(op))
                     2'b00: begin // byte
                         assert(!fault);
