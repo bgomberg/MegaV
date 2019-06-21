@@ -25,6 +25,7 @@ module alu(
     reg fault;
 
     /* Op decoding */
+    wire op_is_sub = op[3];
     wire is_invalid_op = (op[3] & op[1]) | (op[4] & op[3]) | (op[3] & ~op[2] & op[0]) | (op[3] & op[2] & ~op[0]) | (op[4] & ~op[2] & op[1]);
 
     /* Bitwise operations */
@@ -33,11 +34,13 @@ module alu(
     wire [31:0] and_result = in_a & in_b;
 
     /* Adder */
-    wire adder_carry_in = op[3];
-    wire [31:0] adder_a = in_a;
-    wire [31:0] adder_b = in_b ^ {32{op[3]}};
+    wire [31:0] adder_b = in_b ^ {32{op_is_sub}};
     wire [31:0] adder_sum;
-    adder32 adder(adder_a, adder_b, adder_carry_in, adder_sum);
+    adder32 adder(
+        in_a ^ adder_b,
+        in_a & adder_b,
+        op_is_sub,
+        adder_sum);
 
     /* Comparison operations */
     wire signed_lt_result = ($signed(in_a) < $signed(in_b)) ? 1'b1 : 1'b0;
@@ -90,7 +93,10 @@ module alu(
                 end
                 `STATE_DONE: begin
                     if (!available) begin
+                        busy <= 1'b0;
                         state <= `STATE_IDLE;
+                    end else begin
+                        busy <= 1'b1;
                     end
                 end
                 default: begin
