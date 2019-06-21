@@ -3,10 +3,24 @@
  */
 
 `ifdef verilator
-import "DPI-C" function void mem_op_setup(input bit is_write, input bit op_1, input bit op_0, input int addr, input int write_data, input bit read_is_unsigned);
+import "DPI-C" function bit mem_op_setup(input bit is_write, input bit op_1, input bit op_0, input int addr, input int write_data, input bit read_is_unsigned);
 import "DPI-C" function bit mem_op_is_busy();
 import "DPI-C" function int mem_read_get_result();
+`else
+function mem_op_setup;
+    mem_op_setup = 1'b1;
+endfunction
+function mem_op_is_busy;
+    mem_op_is_busy = 1'b0;
+endfunction
+function mem_read_get_result;
+    mem_read_get_result = 32'b0;
+endfunction
 `endif
+
+`define STATE_IDLE          2'b00
+`define STATE_IN_PROGRESS   2'b01
+`define STATE_DONE          2'b10
 
 module memory(
     input clk, // Clock signal
@@ -32,46 +46,50 @@ module memory(
     wire addr_is_misaligned = (op[1] & (addr[1] | addr[0])) | (op[0] & addr[0]);
 
     /* Memory Access */
-    reg started;
+    reg [1:0] state;
     always @(posedge clk) begin
         if (reset) begin
             busy <= 1'b0;
-            started <= 1'b0;
+            state <= `STATE_IDLE;
             fault <= 1'b0;
         end else begin
             fault <= available & (op_is_invalid | addr_is_misaligned);
-            if (!started && available) begin
-                // Starting a new operation
-`ifdef verilator
-                mem_op_setup(is_write, op[1], op[0], addr, in, is_unsigned);
-`endif
-                busy <= 1'b1;
-                started <= 1'b1;
-            end else if (started && busy) begin
-                // Operation has previously been started
-`ifdef verilator
-                if (!mem_op_is_busy()) begin
-`else
-                if (1) begin
-`endif
-                    // Operation is complete
-                    busy <= 1'b0;
-                    if (!is_write) begin
-`ifdef verilator
-                        out <= mem_read_get_result();
-`else
-                        out <= 32'b0;
-`endif
+            case (state)
+                `STATE_IDLE: begin
+                    if (available) begin
+                        // Starting a new operation
+                        if (mem_op_setup(is_write, op[1], op[0], addr, in, is_unsigned)) begin
+                            busy <= 1'b1;
+                            state <= `STATE_IN_PROGRESS;
+                        end
+                    end else begin
+                        busy <= 1'b0;
                     end
                 end
-            end else if (!available) begin
-                // Wait for the available signal to fall before allowing a new operation to start
-                started <= 1'b0;
-            end
+                `STATE_IN_PROGRESS: begin
+                    if (!mem_op_is_busy()) begin
+                        // Operation is complete
+                        if (!is_write) begin
+                            out <= mem_read_get_result();
+                        end
+                        busy <= 1'b0;
+                        state <= `STATE_DONE;
+                    end
+                end
+                `STATE_DONE: begin
+                    if (!available) begin
+                        state <= `STATE_IDLE;
+                    end
+                end
+                default: begin
+                    // should never get here
+                end
+            endcase
         end
     end
 
 `ifdef FORMAL
+    initial assume(reset);
     reg f_past_valid;
     initial f_past_valid = 0;
     always @(posedge clk) begin
@@ -81,6 +99,7 @@ module memory(
     /* Read path */
     always @(posedge clk) begin
         if (f_past_valid) begin
+            assume(state != 2'b11);
             if ($past(reset)) begin
                 assert(!busy);
                 assert(!fault);

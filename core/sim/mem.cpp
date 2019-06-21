@@ -59,7 +59,7 @@ static void mem_write_byte(int addr, char data) {
 	}
 }
 
-void mem_op_setup(svBit is_write, svBit op_1, svBit op_0, int addr, int write_data, svBit read_is_unsigned) {
+svBit mem_op_setup(svBit is_write, svBit op_1, svBit op_0, int addr, int write_data, svBit read_is_unsigned) {
 	if (m_mem_op.busy) {
 		printf("!!! Invalid mem op\n");
 		exit(1);
@@ -75,6 +75,7 @@ void mem_op_setup(svBit is_write, svBit op_1, svBit op_0, int addr, int write_da
 		.debug_cycles = 1,
 		.read_result = UINT32_MAX,
 	};
+	return true;
 }
 
 svBit mem_op_is_busy(void) {
