@@ -7,13 +7,14 @@
 `include "csr.sv"
 `include "fsm.sv"
 
+`define INVALID_FAULT_NUM 3'b011 // Use breakpoint as an invalid fault num
+
 /*
  * The core which controls and integrates the individual components of the CPU.
  */
 module core(
     input clk, // Clock signal
-    input reset, // Reset signal
-    output fault // Fault condition
+    input reset // Reset signal
 );
 
     /* FSM */
@@ -43,7 +44,6 @@ module core(
     wire [31:0] pc_pc /* verilator public */;
     reg [31:0] pc_next_pc /* verilator public */;
     wire [31:0] pc_offset_pc /* verilator public */;
-    wire pc_fault;
     wire [31:0] pc_in = (decode_wb_pc_mux_position == 2'b00) ? pc_next_pc : (
         (decode_wb_pc_mux_position == 2'b01) ? ex_out : (
         (decode_wb_pc_mux_position == 2'b10) ? pc_offset_pc : (
@@ -52,8 +52,7 @@ module core(
         clk & (reset | stage_active[`STAGE_WRITE_BACK]),
         reset,
         pc_in,
-        pc_pc,
-        pc_fault);
+        pc_pc);
     adder32_sync next_pc_adder_module(
         clk & stage_active[`STAGE_DECODE],
         pc_pc,
@@ -66,21 +65,26 @@ module core(
         pc_offset_pc);
 
     /* Memory */
+    wire mem_is_write = stage_active[`STAGE_MEMORY] ? decode_ma_mem_microcode[3] : 1'b0;
     wire [31:0] mem_out /* verilator public */;
     wire mem_busy;
-    wire mem_fault;
+    wire mem_op_fault;
+    wire mem_addr_fault;
+    wire mem_access_fault;
     memory mem_module(
         clk,
         reset,
         (stage_active[`STAGE_FETCH] | stage_active[`STAGE_MEMORY]),
-        stage_active[`STAGE_FETCH] ? 1'b0 : decode_ma_mem_microcode[3],
+        mem_is_write,
         stage_active[`STAGE_FETCH] ? 1'b0 : decode_ma_mem_microcode[2],
         stage_active[`STAGE_FETCH] ? 2'b10 : decode_ma_mem_microcode[1:0],
         stage_active[`STAGE_FETCH] ? pc_pc : alu_out,
         rf_read_data_b,
         mem_out,
         mem_busy,
-        mem_fault);
+        mem_op_fault,
+        mem_addr_fault,
+        mem_access_fault);
 
     /* Instruction decode */
     wire [31:0] decode_imm /* verilator public */;
@@ -168,37 +172,21 @@ module core(
         csr_fault
     );
 
-    /* Fault signal */
-    reg fault;
-    always @(*) begin
-        fault = pc_fault | mem_fault | decode_fault | alu_fault | csr_fault;
-`ifdef VERILATOR
-        if (pc_fault)
-            $display("!!! PC FAULT");
-        if (mem_fault)
-            $display("!!! MEM FAULT");
-        if (decode_fault)
-            $display("!!! DECODE FAULT");
-        if (alu_fault)
-            $display("!!! ALU FAULT");
-        if (csr_fault)
-            $display("!!! CSR FAULT");
-`endif
-    end
-
-`ifdef FORMAL
-    initial assume(reset);
-    reg f_past_valid;
-    initial f_past_valid = 0;
+    /* Faults */
+    reg fault /* verilator public */;
+    reg [2:0] fault_num /* verilator public */;
+    wire illegal_instr_fault = decode_fault | mem_op_fault | alu_fault | csr_fault;
+    wire [2:0] active_fault_num = (mem_addr_fault | mem_access_fault) ? {stage_active[`STAGE_MEMORY], mem_is_write, mem_access_fault} : (
+         illegal_instr_fault ? 3'b010 : `INVALID_FAULT_NUM);
     always @(posedge clk) begin
-        f_past_valid = 1;
-    end
-
-    /* Validate Logic */
-    always @(posedge clk) begin
-        if (f_past_valid) begin
+        if (reset) begin
+            fault <= 1'b0;
+            fault_num <= `INVALID_FAULT_NUM;
+        end else if (active_fault_num != `INVALID_FAULT_NUM) begin
+            fault <= 1'b1;
+            $display("!!! FAULT: 0x%x", active_fault_num);
+            fault_num <= active_fault_num;
         end
     end
-`endif
 
 endmodule

@@ -113,7 +113,7 @@ private:
 
 	void eval() {
 		module_->eval();
-		if (module_->fault) {
+		if ((*this)->fault) {
 			printf("!!! FAULT\n");
 			exit(1);
 		}

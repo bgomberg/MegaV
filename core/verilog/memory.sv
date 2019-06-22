@@ -8,7 +8,7 @@ import "DPI-C" function bit mem_op_is_busy();
 import "DPI-C" function int mem_read_get_result();
 `else
 function mem_op_setup;
-    mem_op_setup = 1'b1;
+    mem_op_setup = 1'b0;
 endfunction
 function mem_op_is_busy;
     mem_op_is_busy = 1'b0;
@@ -33,43 +33,52 @@ module memory(
     input [31:0] in, // Input data
     output [31:0] out, // Output data
     output busy, // Operation busy
-    output fault // A fault condition has occurred
+    output op_fault, // Invalid op fault
+    output addr_fault, // Misaligned address fault
+    output access_fault // Access fault
 );
 
     /* Outputs */
     reg [31:0] out;
     reg busy;
-    reg fault;
+    reg op_fault;
+    reg addr_fault;
+    reg access_fault;
 
     /* Basic Decode */
     wire op_is_invalid = op[1] & op[0];
     wire addr_is_misaligned = (op[1] & (addr[1] | addr[0])) | (op[0] & addr[0]);
 
     /* Memory Access */
+    reg setup_failed;
     reg [1:0] state;
     always @(posedge clk) begin
         if (reset) begin
             busy <= 1'b0;
             state <= `STATE_IDLE;
-            fault <= 1'b0;
+            op_fault <= 1'b0;
+            addr_fault <= 1'b0;
+            access_fault <= 1'b0;
+            setup_failed <= 1'b0;
         end else begin
-            fault <= available & (op_is_invalid | addr_is_misaligned);
+            addr_fault <= available & addr_is_misaligned;
+            op_fault <= available & op_is_invalid;
+            access_fault <= setup_failed;
             case (state)
                 `STATE_IDLE: begin
                     if (available) begin
                         // Starting a new operation
-                        if (mem_op_setup(is_write, op[1], op[0], addr, in, is_unsigned)) begin
-                            busy <= 1'b1;
-                            state <= `STATE_IN_PROGRESS;
-                        end
+                        setup_failed <= mem_op_setup(is_write, op[1], op[0], addr, in, is_unsigned);
+                        state <= `STATE_IN_PROGRESS;
+                        busy <= 1'b1;
                     end else begin
                         busy <= 1'b0;
                     end
                 end
                 `STATE_IN_PROGRESS: begin
-                    if (!mem_op_is_busy()) begin
+                    if (setup_failed | !mem_op_is_busy()) begin
                         // Operation is complete
-                        if (!is_write) begin
+                        if (!is_write & ~setup_failed) begin
                             out <= mem_read_get_result();
                         end
                         busy <= 1'b0;
@@ -102,28 +111,36 @@ module memory(
             assume(state != 2'b11);
             if ($past(reset)) begin
                 assert(!busy);
-                assert(!fault);
+                assert(!op_fault);
+                assert(!addr_fault);
+                assert(!access_fault);
             end else if ($past(available) && !busy) begin
                 case ($past(op))
                     2'b00: begin // byte
-                        assert(!fault);
+                        assert(!op_fault);
+                        assert(!addr_fault);
+                        assert(!access_fault);
                     end
                     2'b01: begin // half-word
+                        assert(!op_fault);
+                        assert(!access_fault);
                         if ($past(addr[0])) begin
-                            assert(fault);
+                            assert(addr_fault);
                         end else begin
-                            assert(!fault);
+                            assert(!addr_fault);
                         end
                     end
                     2'b10: begin // word
+                        assert(!op_fault);
+                        assert(!access_fault);
                         if ($past(addr[1:0])) begin
-                            assert(fault);
+                            assert(addr_fault);
                         end else begin
-                            assert(!fault);
+                            assert(!addr_fault);
                         end
                     end
                     default: begin
-                        assert(fault);
+                        assert(op_fault);
                     end
                 endcase
             end

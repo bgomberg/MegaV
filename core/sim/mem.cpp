@@ -64,6 +64,10 @@ svBit mem_op_setup(svBit is_write, svBit op_1, svBit op_0, int addr, int write_d
 		printf("!!! Invalid mem op\n");
 		exit(1);
 	}
+	if (addr < 0 || (is_write && addr < 0xC0) || addr >= 0x100) {
+		// Access fault
+		return 1;
+	}
 	m_mem_op = (mem_op_t) {
 		.is_write = is_write,
 		.addr = addr,
@@ -75,7 +79,7 @@ svBit mem_op_setup(svBit is_write, svBit op_1, svBit op_0, int addr, int write_d
 		.debug_cycles = 1,
 		.read_result = UINT32_MAX,
 	};
-	return true;
+	return 0;
 }
 
 svBit mem_op_is_busy(void) {
