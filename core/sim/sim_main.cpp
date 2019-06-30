@@ -10,6 +10,16 @@
 #include <stdio.h>
 
 
+#define STAGE_CONTROL 0
+#define STAGE_FETCH 1
+#define STAGE_DECODE 2
+#define STAGE_READ 3
+#define STAGE_EXECUTE 4
+#define STAGE_MEMORY 5
+#define STAGE_WRITE_BACK 6
+#define NUM_STAGES 7
+
+
 static const char * const REGISTER_NAMES[] = {
 	"zero",
 	"ra",
@@ -62,12 +72,14 @@ public:
 		while ((*this)->stage_active == prev_stage) {
 			tick();
 		}
-		if ((*this)->stage_active == (1 << 0)) {
+		if ((*this)->stage_active == (1 << STAGE_CONTROL)) {
+			printf("Executing STAGE_CONTROL\n");
+		} else if ((*this)->stage_active == (1 << STAGE_FETCH)) {
 			printf("Executing STAGE_FETCH\n");
 			printf("  pc: 0x%x\n", (*this)->pc_pc);
-			printf("  instr: 0x%x\n", (*this)->mem_out);
-		} else if ((*this)->stage_active == (1 << 1)) {
+		} else if ((*this)->stage_active == (1 << STAGE_DECODE)) {
 			printf("Executing STAGE_DECODE\n");
+			printf("  instr: 0x%x\n", (*this)->instr);
 			printf("  imm: 0x%x\n", (*this)->decode_imm);
 			printf("  alu_a_mux_position: 0x%x\n", (*this)->decode_alu_a_mux_position);
 			printf("  alu_b_mux_position: 0x%x\n", (*this)->decode_alu_b_mux_position);
@@ -79,20 +91,21 @@ public:
 			printf("  ex_csr_microcode: 0x%x\n", (*this)->decode_ex_csr_microcode);
 			printf("  ma_mem_microcode: 0x%x\n", (*this)->decode_ma_mem_microcode);
 			printf("  wb_rf_microcode : 0x%x\n", (*this)->decode_wb_rf_microcode);
-		} else if ((*this)->stage_active == (1 << 2)) {
+		} else if ((*this)->stage_active == (1 << STAGE_READ)) {
 			printf("Executing STAGE_READ\n");
 			printf("  read_data_a: 0x%x\n", (*this)->rf_read_data_a);
 			printf("  read_data_b: 0x%x\n", (*this)->rf_read_data_b);
-		} else if ((*this)->stage_active == (1 << 3)) {
+		} else if ((*this)->stage_active == (1 << STAGE_EXECUTE)) {
 			printf("Executing STAGE_EXECUTE\n");
 			printf("  out: 0x%x\n", (*this)->alu_out);
-			printf("  csr_read_value: 0x%x\n", (*this)->csr_read_value);
+			printf("  csr_addr_exception: 0x%x\n", (*this)->csr_addr_exception);
 			printf("  csr_in: 0x%x\n", (*this)->csr_in);
+			printf("  csr_read_value: 0x%x\n", (*this)->csr_read_value);
 			printf("  next_pc: 0x%x\n", (*this)->pc_next_pc);
-		} else if ((*this)->stage_active == (1 << 4)) {
+		} else if ((*this)->stage_active == (1 << STAGE_MEMORY)) {
 			printf("Executing STAGE_MEMORY\n");
 			printf("  out: 0x%x\n", (*this)->mem_out);
-		} else if ((*this)->stage_active == (1 << 5)) {
+		} else if ((*this)->stage_active == (1 << STAGE_WRITE_BACK)) {
 			printf("Executing STAGE_WRITE_BACK\n");
 			printf("  write_data: 0x%x\n", (*this)->rf_write_data);
 			printf("  next_pc: 0x%x\n", (*this)->pc_next_pc);
@@ -113,10 +126,6 @@ private:
 
 	void eval() {
 		module_->eval();
-		if ((*this)->fault) {
-			printf("!!! FAULT\n");
-			exit(1);
-		}
 	}
 };
 
@@ -154,10 +163,12 @@ int main(int argc, char** argv) {
 
 	// run until we enter an infinite loop
 	uint32_t prev_pc = UINT32_MAX;
-	while (core->pc_pc != prev_pc) {
+	bool same_pc_flag = false;
+	while (core->pc_pc != prev_pc || !same_pc_flag) {
+		same_pc_flag = core->pc_pc == prev_pc;
 		prev_pc = core->pc_pc;
 		core.step();
-		while (core->stage_active != (1 << 5)) {
+		while (core->stage_active != (1 << (NUM_STAGES - 1))) {
 			core.step();
 		}
 		printf("\n");

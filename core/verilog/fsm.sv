@@ -2,13 +2,14 @@
  * FSM.
  */
 
-`define STAGE_FETCH 0
-`define STAGE_DECODE 1
-`define STAGE_READ 2
-`define STAGE_EXECUTE 3
-`define STAGE_MEMORY 4
-`define STAGE_WRITE_BACK 5
-`define NUM_STAGES 6
+`define STAGE_CONTROL 0
+`define STAGE_FETCH 1
+`define STAGE_DECODE 2
+`define STAGE_READ 3
+`define STAGE_EXECUTE 4
+`define STAGE_MEMORY 5
+`define STAGE_WRITE_BACK 6
+`define NUM_STAGES 7
 
 module fsm(
     input clk, // Clock signal
@@ -59,7 +60,7 @@ module fsm(
 
     /* Validate logic */
     always @(posedge clk) begin
-        assume($past(stage_enabled) & 6'b101011 == 6'b101011);
+        assume($past(stage_enabled) & 7'b1010111 == 7'b1010111);
         if (f_past_valid) begin
             if ($past(reset)) begin
                 assert(stage_active == 1 << 0);

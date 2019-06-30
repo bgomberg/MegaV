@@ -102,7 +102,7 @@ module memory(
     reg f_past_valid;
     initial f_past_valid = 0;
     always @(posedge clk) begin
-        f_past_valid = 1;
+        f_past_valid <= 1;
     end
 
     /* Read path */
@@ -114,7 +114,7 @@ module memory(
                 assert(!op_fault);
                 assert(!addr_fault);
                 assert(!access_fault);
-            end else if ($past(available) && !busy) begin
+            end else if (state == `STATE_DONE && $past(state) == `STATE_IN_PROGRESS) begin
                 case ($past(op))
                     2'b00: begin // byte
                         assert(!op_fault);

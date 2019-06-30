@@ -9,11 +9,16 @@ irq_handler:
   csrr s0, mcause
   li s1, 0xb
   beq s0, s1, irq_handler_ecall
+  li s1, 0x3
+  beq s0, s1, irq_handler_ebreak
   # Default handler
   j .
 
 irq_handler_ecall:
   mret
+
+irq_handler_ebreak:
+  .word 0x0 # Illegal instruction
 
 .section .text
 main:

@@ -6,6 +6,7 @@
 `include "adder32_sync.sv"
 `include "csr.sv"
 `include "fsm.sv"
+`include "control.sv"
 
 `define INVALID_FAULT_NUM 3'b011 // Use breakpoint as an invalid fault num
 
@@ -14,22 +15,25 @@
  */
 module core(
     input clk, // Clock signal
-    input reset // Reset signal
+    input reset, // Reset signal
+    input ext_int // External interrupt
 );
 
     /* FSM */
     wire [`NUM_STAGES-1:0] stage_done;
+    assign stage_done[`STAGE_CONTROL] = ~control_busy;
     assign stage_done[`STAGE_FETCH] = ~mem_busy;
     assign stage_done[`STAGE_DECODE] = 1'b1;
     assign stage_done[`STAGE_READ] = 1'b1;
     assign stage_done[`STAGE_EXECUTE] = ~alu_busy & ~csr_busy;
     assign stage_done[`STAGE_MEMORY] = ~mem_busy;
-    assign stage_done[`STAGE_WRITE_BACK] = 1'b1;
+    assign stage_done[`STAGE_WRITE_BACK] = ~pc_busy;
     /* verilator lint_off UNOPT */
     wire [`NUM_STAGES-1:0] stage_active /* verilator public */;
     /* verilator lint_on UNOPT */
     wire [`NUM_STAGES-1:0] enabled_stages;
-    assign enabled_stages[`STAGE_FETCH] = 1'b1;
+    assign enabled_stages[`STAGE_CONTROL] = 1'b1;
+    assign enabled_stages[`STAGE_FETCH] = control_op_normal;
     assign enabled_stages[`STAGE_DECODE] = 1'b1;
     assign enabled_stages[`STAGE_EXECUTE] = 1'b1;
     assign enabled_stages[`STAGE_WRITE_BACK] = 1'b1;
@@ -40,6 +44,21 @@ module core(
         stage_done,
         stage_active);
 
+    /* Control */
+    wire [1:0] control_op;
+    wire control_op_normal = control_op[1] & control_op[0];
+    wire control_op_trap = ~control_op[1] & ~control_op[0];
+    wire control_busy;
+    control control_module(
+        clk,
+        reset,
+        stage_active[`STAGE_CONTROL],
+        fault,
+        ext_int,
+        1'b0, // TODO: SW interrupt
+        control_op,
+        control_busy);
+
     /* Program counter */
     wire [31:0] pc_pc /* verilator public */;
     reg [31:0] pc_next_pc /* verilator public */;
@@ -48,11 +67,14 @@ module core(
         (decode_wb_pc_mux_position == 2'b01) ? ex_out : (
         (decode_wb_pc_mux_position == 2'b10) ? pc_offset_pc : (
         (decode_wb_pc_mux_position == 2'b11) ? (alu_out[0] ? pc_offset_pc : pc_next_pc) : 32'b0)));
+    wire pc_busy;
     program_counter pc_module(
-        clk & (reset | stage_active[`STAGE_WRITE_BACK]),
+        clk,
         reset,
+        stage_active[`STAGE_WRITE_BACK],
         pc_in,
-        pc_pc);
+        pc_pc,
+        pc_busy);
     adder32_sync next_pc_adder_module(
         clk & stage_active[`STAGE_DECODE],
         pc_pc,
@@ -103,9 +125,10 @@ module core(
     /* verilator lint_on UNOPT */
     wire [1:0] decode_wb_pc_mux_position /* verilator public */;
     wire decode_fault;
+    wire [31:0] instr /* verilator public */ = control_op_normal ? mem_out : 32'h00000073;
     instruction_decode decode_module(
         clk & stage_active[`STAGE_DECODE],
-        mem_out,
+        instr,
         decode_imm,
         decode_alu_a_mux_position,
         decode_alu_b_mux_position,
@@ -153,9 +176,11 @@ module core(
         alu_busy,
         alu_fault);
 
+    /* CSR */
+    wire [11:0] csr_addr_exception /* verilator public */ = control_op_trap ? {9'b0, fault_num} : decode_ex_csr_microcode[14:3];
     wire [31:0] csr_in /* verilator public */ = (decode_csr_mux_position == 2'b00) ? rf_read_data_a : (
         (decode_csr_mux_position == 2'b01) ? decode_imm : (
-        (decode_csr_mux_position == 2'b10) ? pc_next_pc :
+        (decode_csr_mux_position == 2'b10) ? (control_op_trap ? pc_pc : pc_next_pc) :
         32'b0));
     wire [31:0] csr_read_value /* verilator public */;
     wire csr_busy;
@@ -165,7 +190,7 @@ module core(
         reset,
         stage_active[`STAGE_EXECUTE] & decode_ex_csr_microcode[15],
         decode_ex_csr_microcode[2:0],
-        decode_ex_csr_microcode[14:3],
+        csr_addr_exception,
         csr_in,
         csr_read_value,
         csr_busy,
@@ -186,6 +211,8 @@ module core(
             fault <= 1'b1;
             $display("!!! FAULT: 0x%x", active_fault_num);
             fault_num <= active_fault_num;
+        end else if (stage_active[`STAGE_DECODE]) begin
+            fault <= 1'b0;
         end
     end
 

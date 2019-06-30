@@ -72,7 +72,7 @@ module instruction_decode(
         (instr_is_system_mret & (~rs1_is_zero | rs2[4] | rs2[3] | rs2[2] | ~rs2[1] | rs2[0]));
     always @(posedge clk) begin
         rd_rf_microcode <= {
-            rd_rf_enable,
+            ~invalid_instr & rd_rf_enable,
             rs1[3:0],
             rs2[3:0]
         };
@@ -102,7 +102,7 @@ module instruction_decode(
         (instr_is_system_mret & (funct7[6] | funct7[5] | ~funct7[4] | ~funct7[3] | funct7[2] | funct7[1] | funct7[0]));
     always @(posedge clk) begin
         ex_alu_microcode <= {
-            (opcode_is_op | opcode_is_opimm | opcode_is_branch | opcode_is_load | opcode_is_store | opcode_is_auipc |
+            ~invalid_instr & (opcode_is_op | opcode_is_opimm | opcode_is_branch | opcode_is_load | opcode_is_store | opcode_is_auipc |
                 opcode_is_jalr),
             opcode_is_branch,
             funct7[5] & ~funct3[1] & (opcode_is_op | opcode_is_opimm) & (opcode_is_op | funct3[2]) &
@@ -110,7 +110,7 @@ module instruction_decode(
             ({3{opcode_is_op | opcode_is_opimm | opcode_is_branch}} & funct3)
         };
         ex_csr_microcode <= {
-            opcode_is_system,
+            ~invalid_instr & opcode_is_system,
             instr_is_system_e ? {8'b0, ~rs2[0], 3'b011} : {funct7, rs2},
             instr_is_system_csr,
             funct3[1],
@@ -121,7 +121,7 @@ module instruction_decode(
     /* Memory Stage */
     always @(posedge clk) begin
         ma_mem_microcode <= {
-            opcode_is_load | opcode_is_store,
+            ~invalid_instr & (opcode_is_load | opcode_is_store),
             opcode_is_store,
             funct3
         };
@@ -133,7 +133,7 @@ module instruction_decode(
     wire invalid_rd = (wb_rf_enable & rd[4]) | ((opcode_is_fence | instr_is_system_e_mret) & ~rd_is_zero);
     always @(posedge clk) begin
         wb_rf_microcode <= {
-            wb_rf_enable,
+            ~invalid_instr & wb_rf_enable,
             1'b1,
             rd[3:0],
             4'b0
@@ -157,8 +157,9 @@ module instruction_decode(
     end
 
     /* Fault Signal */
+    wire invalid_instr = invalid_opcode | invalid_rs | invalid_funct7 | invalid_funct3 | invalid_rd;
     always @(posedge clk) begin
-        fault <= invalid_opcode | invalid_rs | invalid_funct7 | invalid_funct3 | invalid_rd;
+        fault <= invalid_instr;
     end
 
     /* Mux Position Signals */

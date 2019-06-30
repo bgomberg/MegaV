@@ -3,26 +3,28 @@
 `define STATE_DONE          2'b10
 
 /*
- * Program counter.
+ * Control
  */
-module program_counter(
+module control(
     input clk, // Clock signal
     input reset, // Reset signal
     input available, // Operation available
-    input [31:0] in, // Input data
-    output [31:0] pc, // Current PC
+    input fault, // Fault signal
+    input ext_int, // External interrupt
+    input sw_int, // Software interrupt
+    output [1:0] op, // Control operation (2'b00=trap, 2'b01=ext_int, 2'b10=sw_int, 2'b11=normal)
     output busy // Operation busy
 );
 
     /* Outputs */
-    reg [31:0] pc;
+    reg [1:0] op;
     reg busy;
 
     /* Logic */
     reg [1:0] state;
     always @(posedge clk) begin
         if (reset) begin
-            pc <= 32'b0;
+            op <= 2'b11;
             busy <= 1'b0;
             state <= `STATE_IDLE;
         end else begin
@@ -37,7 +39,15 @@ module program_counter(
                     end
                 end
                 `STATE_IN_PROGRESS: begin
-                    pc <= in;
+                    if (fault) begin
+                        op <= 2'b00;
+                    end else if (ext_int) begin
+                        op <= 2'b01;
+                    end else if (sw_int) begin
+                        op <= 2'b10;
+                    end else begin
+                        op <= 2'b11;
+                    end
                     // Operation is complete
                     busy <= 1'b0;
                     state <= `STATE_DONE;
@@ -70,9 +80,17 @@ module program_counter(
         if (f_past_valid) begin
             assume(state != 2'b11);
             if ($past(reset)) begin
-                assert(pc == 0);
+                assert(op == 2'b11);
             end else if (state == `STATE_DONE && $past(state) == `STATE_IN_PROGRESS) begin
-                assert(pc == $past(in));
+                if ($past(fault)) begin
+                    assert(op == 2'b00);
+                end else if ($past(ext_int)) begin
+                    assert(op == 2'b01);
+                end else if ($past(sw_int)) begin
+                    assert(op == 2'b10);
+                end else begin
+                    assert(op == 2'b11);
+                end
             end
         end
     end
