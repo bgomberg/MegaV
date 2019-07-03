@@ -44,6 +44,7 @@ VERILATOR_ARGS := \
 	$(addprefix -CFLAGS -I,$(dir $(abspath $(SIM_HEADER_FILES)))) \
 	--top-module $(PROJECT_NAME) \
 	--cc \
+	-CFLAGS -g3 \
 	-Mdir $(OBJ_DIR) \
 	-Wall \
 	--prefix $(VERILATOR_MODULE_NAME) \

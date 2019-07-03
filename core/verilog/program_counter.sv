@@ -44,10 +44,7 @@ module program_counter(
                 end
                 `STATE_DONE: begin
                     if (!available) begin
-                        busy <= 1'b0;
                         state <= `STATE_IDLE;
-                    end else begin
-                        busy <= 1'b1;
                     end
                 end
                 default: begin

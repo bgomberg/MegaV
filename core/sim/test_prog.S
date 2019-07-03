@@ -6,19 +6,22 @@ prog_entry:
 .section .irq_handler
 irq_handler:
   # Handle the interrupt
-  csrr s0, mcause
-  li s1, 0xb
-  beq s0, s1, irq_handler_ecall
-  li s1, 0x3
-  beq s0, s1, irq_handler_ebreak
+  csrr  s0, mcause
+  li    s1, 0xb
+  beq   s0, s1, irq_handler_ecall
+  li    s1, 0x3
+  beq   s0, s1, irq_handler_ebreak
   # Default handler
-  j .
+  ori   a5, a5, 0x40
+  j     .
 
 irq_handler_ecall:
   mret
 
 irq_handler_ebreak:
-  .word 0x0 # Illegal instruction
+  ori   a5, a5, 0x02
+  lw    a0, 0x400(x0) # Trigger a memory access fault
+  ori   a5, a5, 0xff
 
 .section .text
 main:

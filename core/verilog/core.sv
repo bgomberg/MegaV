@@ -8,8 +8,6 @@
 `include "fsm.sv"
 `include "control.sv"
 
-`define INVALID_FAULT_NUM 3'b011 // Use breakpoint as an invalid fault num
-
 /*
  * The core which controls and integrates the individual components of the CPU.
  */
@@ -23,7 +21,7 @@ module core(
     wire [`NUM_STAGES-1:0] stage_done;
     assign stage_done[`STAGE_CONTROL] = ~control_busy;
     assign stage_done[`STAGE_FETCH] = ~mem_busy;
-    assign stage_done[`STAGE_DECODE] = 1'b1;
+    assign stage_done[`STAGE_DECODE] = ~decode_busy;
     assign stage_done[`STAGE_READ] = 1'b1;
     assign stage_done[`STAGE_EXECUTE] = ~alu_busy & ~csr_busy;
     assign stage_done[`STAGE_MEMORY] = ~mem_busy;
@@ -31,18 +29,19 @@ module core(
     /* verilator lint_off UNOPT */
     wire [`NUM_STAGES-1:0] stage_active /* verilator public */;
     /* verilator lint_on UNOPT */
-    wire [`NUM_STAGES-1:0] enabled_stages;
-    assign enabled_stages[`STAGE_CONTROL] = 1'b1;
-    assign enabled_stages[`STAGE_FETCH] = control_op_normal;
-    assign enabled_stages[`STAGE_DECODE] = 1'b1;
-    assign enabled_stages[`STAGE_EXECUTE] = 1'b1;
-    assign enabled_stages[`STAGE_WRITE_BACK] = 1'b1;
+    reg fault /* verilator public */;
+    reg [2:0] fault_num /* verilator public */;
     fsm fsm_module(
         clk,
         reset,
-        enabled_stages,
         stage_done,
-        stage_active);
+        decode_fault | mem_op_fault | alu_fault | csr_fault,
+        mem_addr_fault,
+        mem_access_fault,
+        decode_ma_mem_microcode[3],
+        stage_active,
+        fault,
+        fault_num);
 
     /* Control */
     wire [1:0] control_op;
@@ -87,7 +86,6 @@ module core(
         pc_offset_pc);
 
     /* Memory */
-    wire mem_is_write = stage_active[`STAGE_MEMORY] ? decode_ma_mem_microcode[3] : 1'b0;
     wire [31:0] mem_out /* verilator public */;
     wire mem_busy;
     wire mem_op_fault;
@@ -96,9 +94,9 @@ module core(
     memory mem_module(
         clk,
         reset,
-        (stage_active[`STAGE_FETCH] | stage_active[`STAGE_MEMORY]),
-        mem_is_write,
-        stage_active[`STAGE_FETCH] ? 1'b0 : decode_ma_mem_microcode[2],
+        (stage_active[`STAGE_FETCH] & control_op_normal) | (stage_active[`STAGE_MEMORY] & decode_has_mem_stage),
+        stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[3],
+        stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[2],
         stage_active[`STAGE_FETCH] ? 2'b10 : decode_ma_mem_microcode[1:0],
         stage_active[`STAGE_FETCH] ? pc_pc : alu_out,
         rf_read_data_b,
@@ -115,31 +113,35 @@ module core(
     wire [1:0] decode_csr_mux_position /* verilator public */;
     wire [1:0] decode_wb_mux_position /* verilator public */;
     wire [7:0] decode_rd_rf_microcode /* verilator public */;
-    /* verilator lint_off UNOPT */
     wire [5:0] decode_ex_alu_microcode /* verilator public */;
     wire [15:0] decode_ex_csr_microcode /* verilator public */;
-    /* verilator lint_on UNOPT */
     wire [3:0] decode_ma_mem_microcode /* verilator public */;
     /* verilator lint_off UNOPT */
     wire [9:0] decode_wb_rf_microcode /* verilator public */;
     /* verilator lint_on UNOPT */
     wire [1:0] decode_wb_pc_mux_position /* verilator public */;
+    wire decode_has_mem_stage;
+    wire decode_has_read_stage;
     wire decode_fault;
     wire [31:0] instr /* verilator public */ = control_op_normal ? mem_out : 32'h00000073;
+    wire decode_busy;
     instruction_decode decode_module(
-        clk & stage_active[`STAGE_DECODE],
+        clk,
+        reset,
+        stage_active[`STAGE_DECODE],
         instr,
         decode_imm,
         decode_alu_a_mux_position,
         decode_alu_b_mux_position,
         decode_csr_mux_position,
         decode_wb_mux_position,
-        {enabled_stages[`STAGE_READ], decode_rd_rf_microcode},
+        {decode_has_read_stage, decode_rd_rf_microcode},
         decode_ex_alu_microcode,
-        {enabled_stages[`STAGE_MEMORY], decode_ma_mem_microcode},
+        {decode_has_mem_stage, decode_ma_mem_microcode},
         decode_ex_csr_microcode,
         decode_wb_rf_microcode,
         decode_wb_pc_mux_position,
+        decode_busy,
         decode_fault);
 
     /* Register file */
@@ -151,8 +153,8 @@ module core(
     wire [31:0] rf_read_data_a /* verilator public */;
     wire [31:0] rf_read_data_b /* verilator public */;
     register_file rf_module(
-        clk & (((stage_active[`STAGE_READ]) | (stage_active[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[9]))),
-        ~stage_active[`STAGE_READ] & decode_wb_rf_microcode[8],
+        clk & (((stage_active[`STAGE_READ] & decode_has_read_stage) | (stage_active[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[9]))),
+        ~(stage_active[`STAGE_READ] & decode_has_read_stage) & decode_wb_rf_microcode[8],
         decode_wb_rf_microcode[7:4],
         rf_write_data,
         decode_rd_rf_microcode[7:4],
@@ -196,24 +198,5 @@ module core(
         csr_busy,
         csr_fault
     );
-
-    /* Faults */
-    reg fault /* verilator public */;
-    reg [2:0] fault_num /* verilator public */;
-    wire illegal_instr_fault = decode_fault | mem_op_fault | alu_fault | csr_fault;
-    wire [2:0] active_fault_num = (mem_addr_fault | mem_access_fault) ? {stage_active[`STAGE_MEMORY], mem_is_write, mem_access_fault} : (
-         illegal_instr_fault ? 3'b010 : `INVALID_FAULT_NUM);
-    always @(posedge clk) begin
-        if (reset) begin
-            fault <= 1'b0;
-            fault_num <= `INVALID_FAULT_NUM;
-        end else if (active_fault_num != `INVALID_FAULT_NUM) begin
-            fault <= 1'b1;
-            $display("!!! FAULT: 0x%x", active_fault_num);
-            fault_num <= active_fault_num;
-        end else if (stage_active[`STAGE_DECODE]) begin
-            fault <= 1'b0;
-        end
-    end
 
 endmodule

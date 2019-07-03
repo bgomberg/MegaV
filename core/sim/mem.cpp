@@ -1,26 +1,22 @@
 #include "mem.h"
 
-#include <Vmodule.h>
+#include <Vmodule_memory.h>
 
 #include <stdio.h>
 
 typedef struct {
-	bool is_write;
-	int addr;
-	int write_data;
-	bool read_is_unsigned;
-	bool op_1;
-	bool op_0;
 	bool busy;
 	int debug_cycles;
 	uint32_t read_result;
 } mem_op_t;
 
+static const Vmodule_core* m_core;
 static mem_op_t m_mem_op;
 static uint8_t m_flash[0xC0];
 static uint8_t m_ram[0x40];
 
-void mem_load_flash(const void *data, size_t len) {
+void mem_init(const Vmodule_core* core, const void *data, size_t len) {
+	m_core = core;
 	if (len % sizeof(uint32_t) || len > sizeof(m_flash)) {
 		fprintf(stderr, "Invalid flash length (%zu)\n", len);
 		exit(1);
@@ -59,55 +55,51 @@ static void mem_write_byte(int addr, char data) {
 	}
 }
 
-svBit mem_op_setup(svBit is_write, svBit op_1, svBit op_0, int addr, int write_data, svBit read_is_unsigned) {
-	if (m_mem_op.busy) {
-		printf("!!! Invalid mem op\n");
-		exit(1);
+svBit mem_op_setup() {
+	if (!m_core->mem_module->available || m_core->mem_module->started) {
+		return 0;
 	}
-	if (addr < 0 || (is_write && addr < 0xC0) || addr >= 0x100) {
+	const uint32_t addr = m_core->mem_module->addr;
+	if (addr < 0 || (m_core->mem_module->is_write && addr < 0xC0) || addr >= 0x100) {
 		// Access fault
 		return 1;
 	}
 	m_mem_op = (mem_op_t) {
-		.is_write = is_write,
-		.addr = addr,
-		.write_data = write_data,
-		.read_is_unsigned = read_is_unsigned,
-		.op_1 = op_1,
-		.op_0 = op_0,
 		.busy = true,
-		.debug_cycles = 1,
+		.debug_cycles = 0,
 		.read_result = UINT32_MAX,
 	};
 	return 0;
 }
 
 svBit mem_op_is_busy(void) {
-	if (m_mem_op.debug_cycles++ == 5) {
-		if (m_mem_op.is_write) {
-			mem_write_byte(m_mem_op.addr, m_mem_op.write_data & 0xff);
-			if (m_mem_op.op_0 || m_mem_op.op_1) {
-				mem_write_byte(m_mem_op.addr + 1, (m_mem_op.write_data >> 8) & 0xff);
+	if (m_mem_op.busy && ++m_mem_op.debug_cycles == 5) {
+		const uint32_t addr = m_core->mem_module->addr;
+		if (m_core->mem_module->is_write) {
+			const uint32_t write_data = m_core->mem_module->in;
+			mem_write_byte(addr, write_data & 0xff);
+			if (m_core->mem_module->op & (1 << 0) || m_core->mem_module->op & (1 << 1)) {
+				mem_write_byte(addr + 1, (write_data >> 8) & 0xff);
 			}
-			if (m_mem_op.op_1) {
-				mem_write_byte(m_mem_op.addr + 2, (m_mem_op.write_data >> 16) & 0xff);
-				mem_write_byte(m_mem_op.addr + 3, (m_mem_op.write_data >> 24) & 0xff);
+			if (m_core->mem_module->op & (1 << 1)) {
+				mem_write_byte(addr + 2, (write_data >> 16) & 0xff);
+				mem_write_byte(addr + 3, (write_data >> 24) & 0xff);
 			}
 		} else {
-			m_mem_op.read_result = mem_read_byte(m_mem_op.addr);
-			if (m_mem_op.op_0 || m_mem_op.op_1) {
-				m_mem_op.read_result |= (mem_read_byte(m_mem_op.addr + 1) << 8);
+			m_mem_op.read_result = mem_read_byte(addr);
+			if (m_core->mem_module->op & (1 << 0) || m_core->mem_module->op & (1 << 1)) {
+				m_mem_op.read_result |= (mem_read_byte(addr + 1) << 8);
 			}
-			if (m_mem_op.op_1) {
-				m_mem_op.read_result |= (mem_read_byte(m_mem_op.addr + 2) << 16);
-				m_mem_op.read_result |= (mem_read_byte(m_mem_op.addr + 3) << 24);
+			if (m_core->mem_module->op & (1 << 1)) {
+				m_mem_op.read_result |= (mem_read_byte(addr + 2) << 16);
+				m_mem_op.read_result |= (mem_read_byte(addr + 3) << 24);
 			}
-			if (m_mem_op.op_1 == 0 && m_mem_op.op_0 == 0) {
-				if (!m_mem_op.read_is_unsigned && (m_mem_op.read_result & 0x80)) {
+			if (!m_core->mem_module->op & (1 << 1) && !m_core->mem_module->op & (1 << 0)) {
+				if (!m_core->mem_module->is_unsigned && (m_mem_op.read_result & 0x80)) {
 					m_mem_op.read_result |= 0xFFFFFF00;
 				}
-			} else if (m_mem_op.op_1 == 0 && m_mem_op.op_0 == 1) {
-				if (!m_mem_op.read_is_unsigned && (m_mem_op.read_result & 0x8000)) {
+			} else if (!m_core->mem_module->op & (1 << 1) && m_core->mem_module->op & (1 << 0)) {
+				if (!m_core->mem_module->is_unsigned && (m_mem_op.read_result & 0x8000)) {
 					m_mem_op.read_result |= 0xFFFF0000;
 				}
 			}
@@ -118,9 +110,5 @@ svBit mem_op_is_busy(void) {
 }
 
 int mem_read_get_result(void) {
-	if (m_mem_op.busy || m_mem_op.is_write) {
-		printf("!!! Invalid mem result (%d, %d)\n");
-		exit(1);
-	}
 	return m_mem_op.read_result;
 }
