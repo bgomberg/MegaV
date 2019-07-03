@@ -280,7 +280,7 @@ class Core {
 public:
 	Core() : module_(new Vmodule()) {
 		module_->clk = 0;
-		module_->reset = 0;
+		module_->reset_n = 1;
 	}
 
 	~Core() {
@@ -295,9 +295,9 @@ public:
 	void reset() {
 		printf("Resetting core\n");
 		eval();
-		module_->reset = 1;
+		module_->reset_n = 0;
 		tick();
-		module_->reset = 0;
+		module_->reset_n = 1;
 	}
 
 	void step() {

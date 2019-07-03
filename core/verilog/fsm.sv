@@ -12,7 +12,7 @@
  */
 module fsm(
     input clk, // Clock signal
-    input reset, // Reset signal
+    input reset_n, // Reset signal (active low)
     input [`NUM_STAGES-1:0] stage_done, // Stage done
     input illegal_instr_fault, // Illegal instruction fault
     input mem_addr_fault, // Memory address fault
@@ -45,18 +45,18 @@ module fsm(
         (mem_stage_mem_fault & mem_fault_is_store) | non_control_stage_instr_fault,
         ~non_control_stage_instr_fault & ~mem_addr_fault & mem_access_fault
     };
-    wire fault_value = ~reset & (current_stage_done ? active_fault : fault);
+    wire fault_value = reset_n & (current_stage_done ? active_fault : fault);
     wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
     always @(posedge clk) begin
         fault_num <= active_fault ? active_fault_num : fault_num;
-        in_progress <= ~reset & ~current_stage_done;
+        in_progress <= reset_n & ~current_stage_done;
         fault <= fault_value;
-        stage_active <= (~reset & ~active_fault) ? (current_stage_done ? next_stage : stage_active) : 1 << 0;
-        control_op <= (reset | active_fault | (current_stage_done & next_stage[`STAGE_CONTROL])) ? control_op_value : control_op;
+        stage_active <= (reset_n & ~active_fault) ? (current_stage_done ? next_stage : stage_active) : 1 << 0;
+        control_op <= (~reset_n | active_fault | (current_stage_done & next_stage[`STAGE_CONTROL])) ? control_op_value : control_op;
     end
 
 `ifdef FORMAL
-    initial assume(reset);
+    initial assume(~reset_n);
     reg f_past_valid;
     initial f_past_valid = 0;
     always @(posedge clk) begin
@@ -68,10 +68,10 @@ module fsm(
         if (f_past_valid) begin
             // Only one bit in stage_active should ever be set
             assume($past(stage_active & (stage_active - 1)) == 0);
-            if ($past(reset)) begin
+            if ($past(~reset_n)) begin
                 assert(stage_active == 1 << 0);
                 assert(!fault);
-            end else if ($past(stage_active) != $past(stage_active, 2) || $past(reset, 2)) begin
+            end else if ($past(stage_active) != $past(stage_active, 2) || $past(~reset_n, 2)) begin
                 // need to stay in each stage for at least 2 clock cycles
                 assert(stage_active == $past(stage_active));
                 assert(fault == $past(fault));

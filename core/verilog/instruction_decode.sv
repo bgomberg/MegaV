@@ -7,7 +7,7 @@
  */
 module instruction_decode(
     input clk, // Clock signal
-    input reset, // Reset signal
+    input reset_n, // Reset signal (active low)
     input available, // Operation available
     input [31:0] instr, // Instruction to decode
     output [31:0] imm, // Immediate value
@@ -120,7 +120,7 @@ module instruction_decode(
     reg [1:0] state;
     wire invalid_instr = invalid_opcode | invalid_rs | invalid_funct7 | invalid_funct3 | invalid_rd;
     always @(posedge clk) begin
-        if (reset) begin
+        if (~reset_n) begin
             busy <= 1'b0;
             state <= `STATE_IDLE;
             fault <= 1'b0;
@@ -238,7 +238,7 @@ module instruction_decode(
     always @(posedge clk) begin
         if (f_past_valid) begin
             assume(state != 2'b11);
-            if ($past(reset)) begin
+            if ($past(~reset_n)) begin
                 assert(!busy);
                 assert(!fault);
             end else if (state == `STATE_DONE && $past(state) == `STATE_IN_PROGRESS) begin

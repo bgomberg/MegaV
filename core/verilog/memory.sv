@@ -20,7 +20,7 @@ endfunction
 
 module memory(
     input clk, // Clock signal
-    input reset, // Reset signal
+    input reset_n, // Reset signal (active low)
     input available /* verilator public */, // Operation available
     input is_write /* verilator public */, // Whether or not the operation is a write
     input is_unsigned /* verilator public */, // Whether or not the read byte/half-word value should be zero-extended (vs. sign-extended)
@@ -48,16 +48,16 @@ module memory(
     /* Memory Access */
     reg started /* verilator public */;
     always @(posedge clk) begin
-        addr_fault <= ~reset & available & addr_is_misaligned;
-        op_fault <= ~reset & available & op_is_invalid;
-        access_fault <= ~reset & available & mem_op_setup();
+        addr_fault <= reset_n & available & addr_is_misaligned;
+        op_fault <= reset_n & available & op_is_invalid;
+        access_fault <= reset_n & available & mem_op_setup();
         out <= mem_read_get_result();
-        started <= ~reset & ((started & (available | busy)) | (~busy & available & ~mem_op_setup()));
-        busy <= ~reset & ((~started & ~busy & available & ~mem_op_setup()) | (busy & mem_op_is_busy()));
+        started <= reset_n & ((started & (available | busy)) | (~busy & available & ~mem_op_setup()));
+        busy <= reset_n & ((~started & ~busy & available & ~mem_op_setup()) | (busy & mem_op_is_busy()));
     end
 
 `ifdef FORMAL
-    initial assume(reset);
+    initial assume(~reset_n);
     reg f_past_valid;
     initial f_past_valid = 0;
     always @(posedge clk) begin
@@ -78,7 +78,7 @@ module memory(
             if (busy) begin
                 assume(available);
             end
-            if ($past(reset)) begin
+            if ($past(~reset_n)) begin
                 assert(!busy);
                 assert(!op_fault);
                 assert(!addr_fault);

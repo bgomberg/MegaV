@@ -9,7 +9,7 @@ module csr #(
     parameter [31:0] IRQ_HANDLER_ADDR = 32'h00000010
 ) (
     input clk, // Clock signal
-    input reset, // Reset signal
+    input reset_n, // Reset signal (active low)
     input available, // Operation available
     input [2:0] op, // (3'b000=Exception, 3'b001=MRET, 3'b101=CSRRW, 3'b110=CSRRS, 3'b111=CSRRC)
     input [11:0] addr_exception, // Address / exception value
@@ -46,7 +46,7 @@ module csr #(
     /* Logic */
     reg [1:0] state;
     always @(posedge clk) begin
-        if (reset) begin
+        if (~reset_n) begin
             interrupts_enabled <= 1'b0;
             prior_interrupts_enabled <= 1'b0;
             external_interrupt_enabled <= 1'b0;
@@ -168,7 +168,7 @@ module csr #(
     end
 
 `ifdef FORMAL
-    initial assume(reset);
+    initial assume(~reset_n);
     initial interrupts_enabled = 1'b0;
     initial prior_interrupts_enabled = 1'b0;
     initial external_interrupt_enabled = 1'b0;
@@ -186,7 +186,7 @@ module csr #(
     end
 
     always @(posedge clk) begin
-        if (f_past_valid && !$past(reset) && $past(available) && !busy) begin
+        if (f_past_valid && !$past(~reset_n) && $past(available) && !busy) begin
             assume(state != 2'b11);
             if ($past(op) == 3'b000) begin
                 // exception

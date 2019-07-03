@@ -9,7 +9,7 @@
  */
 module alu(
     input clk, // Clock signal
-    input reset, // Reset signal
+    input reset_n, // Reset signal (active low)
     input available, // Operation available
     input [4:0] op, // Operation to be performed
     input [31:0] in_a, // Input data (bus A)
@@ -50,7 +50,7 @@ module alu(
     /* Logic */
     reg [1:0] state;
     always @(posedge clk) begin
-        if (reset) begin
+        if (~reset_n) begin
             busy <= 1'b0;
             state <= `STATE_IDLE;
             fault <= 1'b0;
@@ -107,7 +107,7 @@ module alu(
     end
 
 `ifdef FORMAL
-    initial assume(reset);
+    initial assume(~reset_n);
     reg f_past_valid;
     initial f_past_valid = 0;
     always @(posedge clk) begin
@@ -118,7 +118,7 @@ module alu(
     always @(posedge clk) begin
         if (f_past_valid) begin
             assume(state != 2'b11);
-            if ($past(reset)) begin
+            if ($past(~reset_n)) begin
                 assert(!busy);
                 assert(!fault);
             end else if ($past(available) && !busy) begin

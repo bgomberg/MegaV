@@ -12,7 +12,7 @@
  */
 module core(
     input clk, // Clock signal
-    input reset, // Reset signal
+    input reset_n, // Reset signal (active low)
     input ext_int // External interrupt
 );
 
@@ -34,7 +34,7 @@ module core(
     reg [2:0] fault_num /* verilator public */;
     fsm fsm_module(
         clk,
-        reset,
+        reset_n,
         stage_done,
         decode_fault | mem_op_fault | alu_fault | csr_fault,
         mem_addr_fault,
@@ -57,7 +57,7 @@ module core(
     wire pc_busy;
     program_counter pc_module(
         clk,
-        reset,
+        reset_n,
         stage_active[`STAGE_WRITE_BACK],
         pc_in,
         pc_pc,
@@ -81,7 +81,7 @@ module core(
     wire mem_access_fault;
     memory mem_module(
         clk,
-        reset,
+        reset_n,
         (stage_active[`STAGE_FETCH] & control_op_normal) | (stage_active[`STAGE_MEMORY] & decode_has_mem_stage),
         stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[3],
         stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[2],
@@ -115,7 +115,7 @@ module core(
     wire decode_busy;
     instruction_decode decode_module(
         clk,
-        reset,
+        reset_n,
         stage_active[`STAGE_DECODE],
         instr,
         decode_imm,
@@ -157,7 +157,7 @@ module core(
     wire alu_fault;
     alu alu_module(
         clk,
-        reset,
+        reset_n,
         stage_active[`STAGE_EXECUTE] & decode_ex_alu_microcode[5],
         decode_ex_alu_microcode[4:0],
         alu_in_a,
@@ -177,7 +177,7 @@ module core(
     wire csr_fault;
     csr csr_module(
         clk,
-        reset,
+        reset_n,
         stage_active[`STAGE_EXECUTE] & decode_ex_csr_microcode[15],
         decode_ex_csr_microcode[2:0],
         csr_addr_exception,
