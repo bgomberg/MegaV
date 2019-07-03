@@ -1,3 +1,7 @@
+`define STATE_IDLE          2'b00
+`define STATE_IN_PROGRESS   2'b01
+`define STATE_DONE          2'b10
+
 /*
  * A decoder for the RV32I instruction set.
  */

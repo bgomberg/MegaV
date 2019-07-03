@@ -1,7 +1,3 @@
-`define STATE_IDLE          2'b00
-`define STATE_IN_PROGRESS   2'b01
-`define STATE_DONE          2'b10
-
 /*
  * Program counter.
  */
@@ -19,39 +15,11 @@ module program_counter(
     reg busy;
 
     /* Logic */
-    reg [1:0] state;
+    reg started;
     always @(posedge clk) begin
-        if (reset) begin
-            pc <= 32'b0;
-            busy <= 1'b0;
-            state <= `STATE_IDLE;
-        end else begin
-            case (state)
-                `STATE_IDLE: begin
-                    if (available) begin
-                        // Starting a new operation
-                        busy <= 1'b1;
-                        state <= `STATE_IN_PROGRESS;
-                    end else begin
-                        busy <= 1'b0;
-                    end
-                end
-                `STATE_IN_PROGRESS: begin
-                    pc <= in;
-                    // Operation is complete
-                    busy <= 1'b0;
-                    state <= `STATE_DONE;
-                end
-                `STATE_DONE: begin
-                    if (!available) begin
-                        state <= `STATE_IDLE;
-                    end
-                end
-                default: begin
-                    // should never get here
-                end
-            endcase
-        end
+        pc <= (~reset & started & busy) ? in : ({32{~reset}} & pc);
+        busy <= ~reset & ~started & available;
+        started <= ~reset & available;
     end
 
 `ifdef FORMAL
@@ -65,10 +33,10 @@ module program_counter(
     /* Validate logic */
     always @(posedge clk) begin
         if (f_past_valid) begin
-            assume(state != 2'b11);
+            assume(~started | busy);
             if ($past(reset)) begin
                 assert(pc == 0);
-            end else if (state == `STATE_DONE && $past(state) == `STATE_IN_PROGRESS) begin
+            end else if ($past(busy) && !busy) begin
                 assert(pc == $past(in));
             end
         end
