@@ -48,29 +48,12 @@ module memory(
     /* Memory Access */
     reg started /* verilator public */;
     always @(posedge clk) begin
-        if (reset) begin
-            busy <= 1'b0;
-            started <= 1'b0;
-            op_fault <= 1'b0;
-            addr_fault <= 1'b0;
-            access_fault <= 1'b0;
-        end else begin
-            addr_fault <= available & addr_is_misaligned;
-            op_fault <= available & op_is_invalid;
-            access_fault <= available & (addr_is_misaligned | mem_op_setup());
-            out <= mem_read_get_result();
-            if (~started & ~busy & available & ~(addr_is_misaligned | mem_op_setup())) begin
-                // Starting a new operation
-                started <= 1'b1;
-                busy <= 1'b1;
-            end else if (started & busy & ~mem_op_is_busy()) begin
-                // Operation is complete
-                busy <= 1'b0;
-            end else if (started & ~busy & ~available) begin
-                // End of the operation
-                started <= 1'b0;
-            end
-        end
+        addr_fault <= ~reset & available & addr_is_misaligned;
+        op_fault <= ~reset & available & op_is_invalid;
+        access_fault <= ~reset & available & mem_op_setup();
+        out <= mem_read_get_result();
+        started <= ~reset & ((started & (available | busy)) | (~busy & available & ~mem_op_setup()));
+        busy <= ~reset & ((~started & ~busy & available & ~mem_op_setup()) | (busy & mem_op_is_busy()));
     end
 
 `ifdef FORMAL

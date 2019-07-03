@@ -4,6 +4,9 @@
 
 #include <stdio.h>
 
+#define BIT(VAL, POS) \
+	(((VAL) >> (POS)) & 1)
+
 typedef struct {
 	bool busy;
 	int debug_cycles;
@@ -60,6 +63,11 @@ svBit mem_op_setup() {
 		return 0;
 	}
 	const uint32_t addr = m_core->mem_module->addr;
+	const uint8_t op = m_core->mem_module->op;
+	if ((BIT(op, 1) & (BIT(addr, 1) | BIT(addr, 0))) | (BIT(op, 0) & BIT(addr, 0))) {
+		// Address misaligned
+		return 1;
+	}
 	if (addr < 0 || (m_core->mem_module->is_write && addr < 0xC0) || addr >= 0x100) {
 		// Access fault
 		return 1;
@@ -75,30 +83,31 @@ svBit mem_op_setup() {
 svBit mem_op_is_busy(void) {
 	if (m_mem_op.busy && ++m_mem_op.debug_cycles == 5) {
 		const uint32_t addr = m_core->mem_module->addr;
+		const uint8_t op = m_core->mem_module->op;
 		if (m_core->mem_module->is_write) {
 			const uint32_t write_data = m_core->mem_module->in;
 			mem_write_byte(addr, write_data & 0xff);
-			if (m_core->mem_module->op & (1 << 0) || m_core->mem_module->op & (1 << 1)) {
+			if (BIT(op, 0) || BIT(op, 1)) {
 				mem_write_byte(addr + 1, (write_data >> 8) & 0xff);
 			}
-			if (m_core->mem_module->op & (1 << 1)) {
+			if (BIT(op, 1)) {
 				mem_write_byte(addr + 2, (write_data >> 16) & 0xff);
 				mem_write_byte(addr + 3, (write_data >> 24) & 0xff);
 			}
 		} else {
 			m_mem_op.read_result = mem_read_byte(addr);
-			if (m_core->mem_module->op & (1 << 0) || m_core->mem_module->op & (1 << 1)) {
+			if (BIT(op, 0) || BIT(op, 1)) {
 				m_mem_op.read_result |= (mem_read_byte(addr + 1) << 8);
 			}
-			if (m_core->mem_module->op & (1 << 1)) {
+			if (BIT(op, 1)) {
 				m_mem_op.read_result |= (mem_read_byte(addr + 2) << 16);
 				m_mem_op.read_result |= (mem_read_byte(addr + 3) << 24);
 			}
-			if (!m_core->mem_module->op & (1 << 1) && !m_core->mem_module->op & (1 << 0)) {
+			if (!BIT(op, 1) && !BIT(op, 0)) {
 				if (!m_core->mem_module->is_unsigned && (m_mem_op.read_result & 0x80)) {
 					m_mem_op.read_result |= 0xFFFFFF00;
 				}
-			} else if (!m_core->mem_module->op & (1 << 1) && m_core->mem_module->op & (1 << 0)) {
+			} else if (!BIT(op, 1) && BIT(op, 0)) {
 				if (!m_core->mem_module->is_unsigned && (m_mem_op.read_result & 0x8000)) {
 					m_mem_op.read_result |= 0xFFFF0000;
 				}
