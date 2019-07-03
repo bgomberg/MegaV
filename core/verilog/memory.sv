@@ -65,12 +65,10 @@ module memory(
                 busy <= 1'b1;
             end else if (started & busy & ~mem_op_is_busy()) begin
                 // Operation is complete
-                started <= 1'b1;
                 busy <= 1'b0;
             end else if (started & ~busy & ~available) begin
                 // End of the operation
                 started <= 1'b0;
-                busy <= 1'b0;
             end
         end
     end

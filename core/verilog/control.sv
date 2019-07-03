@@ -1,7 +1,3 @@
-`define STATE_IDLE          2'b00
-`define STATE_IN_PROGRESS   2'b01
-`define STATE_DONE          2'b10
-
 /*
  * Control
  */
@@ -21,50 +17,12 @@ module control(
     reg busy;
 
     /* Logic */
-    reg [1:0] state;
+    wire [1:0] op_value = {~fault & ~ext_int, ~fault & (ext_int | ~sw_int)};
+    reg started;
     always @(posedge clk) begin
-        if (reset) begin
-            op <= 2'b11;
-            busy <= 1'b0;
-            state <= `STATE_IDLE;
-        end else begin
-            case (state)
-                `STATE_IDLE: begin
-                    if (available) begin
-                        // Starting a new operation
-                        busy <= 1'b1;
-                        state <= `STATE_IN_PROGRESS;
-                    end else begin
-                        busy <= 1'b0;
-                    end
-                end
-                `STATE_IN_PROGRESS: begin
-                    if (fault) begin
-                        op <= 2'b00;
-                    end else if (ext_int) begin
-                        op <= 2'b01;
-                    end else if (sw_int) begin
-                        op <= 2'b10;
-                    end else begin
-                        op <= 2'b11;
-                    end
-                    // Operation is complete
-                    busy <= 1'b0;
-                    state <= `STATE_DONE;
-                end
-                `STATE_DONE: begin
-                    if (!available) begin
-                        busy <= 1'b0;
-                        state <= `STATE_IDLE;
-                    end else begin
-                        busy <= 1'b1;
-                    end
-                end
-                default: begin
-                    // should never get here
-                end
-            endcase
-        end
+        op <= (started & busy) ? op_value : op;
+        busy <= ~reset & ~started & available;
+        started <= ~reset & (busy | available);
     end
 
 `ifdef FORMAL
@@ -78,10 +36,11 @@ module control(
     /* Validate logic */
     always @(posedge clk) begin
         if (f_past_valid) begin
-            assume(state != 2'b11);
-            if ($past(reset)) begin
-                assert(op == 2'b11);
-            end else if (state == `STATE_DONE && $past(state) == `STATE_IN_PROGRESS) begin
+            assume(~started | busy);
+            if (busy) begin
+                assume(available);
+            end
+            if (!$past(reset) && !busy && $past(busy)) begin
                 if ($past(fault)) begin
                     assert(op == 2'b00);
                 end else if ($past(ext_int)) begin

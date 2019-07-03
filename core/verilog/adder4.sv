@@ -1,6 +1,3 @@
-`ifndef __ADDER4_SV__
-`define __ADDER4_SV__
-
 /*
  * A 4 bit full adder.
  */
@@ -38,5 +35,3 @@ module adder4(
 `endif
 
 endmodule
-
-`endif
