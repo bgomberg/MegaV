@@ -6,7 +6,6 @@
 `include "adder32_sync.sv"
 `include "csr.sv"
 `include "fsm.sv"
-`include "control.sv"
 
 /*
  * The core which controls and integrates the individual components of the CPU.
@@ -19,7 +18,7 @@ module core(
 
     /* FSM */
     wire [`NUM_STAGES-1:0] stage_done;
-    assign stage_done[`STAGE_CONTROL] = ~control_busy;
+    assign stage_done[`STAGE_CONTROL] = 1'b1;
     assign stage_done[`STAGE_FETCH] = ~mem_busy;
     assign stage_done[`STAGE_DECODE] = ~decode_busy;
     assign stage_done[`STAGE_READ] = 1'b1;
@@ -29,7 +28,9 @@ module core(
     /* verilator lint_off UNOPT */
     wire [`NUM_STAGES-1:0] stage_active /* verilator public */;
     /* verilator lint_on UNOPT */
-    reg fault /* verilator public */;
+    wire [1:0] control_op /* verilator public */;
+    wire control_op_normal = control_op[1] & control_op[0];
+    wire control_op_trap = ~control_op[1] & ~control_op[0];
     reg [2:0] fault_num /* verilator public */;
     fsm fsm_module(
         clk,
@@ -39,24 +40,11 @@ module core(
         mem_addr_fault,
         mem_access_fault,
         decode_ma_mem_microcode[3],
-        stage_active,
-        fault,
-        fault_num);
-
-    /* Control */
-    wire [1:0] control_op;
-    wire control_op_normal = control_op[1] & control_op[0];
-    wire control_op_trap = ~control_op[1] & ~control_op[0];
-    wire control_busy;
-    control control_module(
-        clk,
-        reset,
-        stage_active[`STAGE_CONTROL],
-        fault,
         ext_int,
         1'b0, // TODO: SW interrupt
+        stage_active,
         control_op,
-        control_busy);
+        fault_num);
 
     /* Program counter */
     wire [31:0] pc_pc /* verilator public */;

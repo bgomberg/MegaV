@@ -18,20 +18,23 @@ module fsm(
     input mem_addr_fault, // Memory address fault
     input mem_access_fault, // Memory access fault
     input mem_fault_is_store, // Memory fault is related to a store operation
+    input ext_int, // External interrupt
+    input sw_int, // Software interrupt
     output [`NUM_STAGES-1:0] stage_active, // Current stage
-    output fault, // Fault active
+    output [1:0] control_op, // Control operation (2'b00=trap, 2'b01=ext_int, 2'b10=sw_int, 2'b11=normal)
     output [2:0] fault_num // Active fault number
 );
 
     /* Outputs */
     reg [`NUM_STAGES-1:0] stage_active;
-    reg fault;
+    reg [1:0] control_op;
     reg [2:0] fault_num;
 
     /* Logic */
+    reg fault;
     reg in_progress; // need to stall at least one cycle per stage to allow the stage_done bits to be updated
+    wire [`NUM_STAGES-1:0] next_stage = {stage_active[`NUM_STAGES-2:0], stage_active[`NUM_STAGES-1]};
     wire current_stage_done = ((stage_active & stage_done) != 0) & in_progress;
-    wire [`NUM_STAGES-1:0] next_stage = current_stage_done ? {stage_active[`NUM_STAGES-2:0], stage_active[`NUM_STAGES-1]} : stage_active;
     wire mem_fault = mem_addr_fault | mem_access_fault;
     wire fetch_stage_mem_fault = mem_fault & stage_active[`STAGE_FETCH];
     wire mem_stage_mem_fault = mem_fault & stage_active[`STAGE_MEMORY];
@@ -42,11 +45,14 @@ module fsm(
         (mem_stage_mem_fault & mem_fault_is_store) | non_control_stage_instr_fault,
         ~non_control_stage_instr_fault & ~mem_addr_fault & mem_access_fault
     };
+    wire fault_value = ~reset & (current_stage_done ? active_fault : fault);
+    wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
     always @(posedge clk) begin
         fault_num <= active_fault ? active_fault_num : fault_num;
         in_progress <= ~reset & ~current_stage_done;
-        fault <= ~reset & (current_stage_done ? active_fault : fault);
-        stage_active <= (~reset & ~active_fault) ? next_stage : 1 << 0;
+        fault <= fault_value;
+        stage_active <= (~reset & ~active_fault) ? (current_stage_done ? next_stage : stage_active) : 1 << 0;
+        control_op <= (reset | active_fault | (current_stage_done & next_stage[`STAGE_CONTROL])) ? control_op_value : control_op;
     end
 
 `ifdef FORMAL

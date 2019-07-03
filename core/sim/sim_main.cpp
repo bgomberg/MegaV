@@ -307,12 +307,12 @@ public:
 		case STAGE_CONTROL:
 			printf("Executing STAGE_CONTROL\n");
 			printf("  Inputs:\n");
-			printf("    fault: %d\n", (*this)->fault);
 			printf("    fault_num: %d\n", (*this)->fault_num);
 			break;
 		case STAGE_FETCH:
 			printf("Executing STAGE_FETCH\n");
 			printf("  Inputs:\n");
+			printf("    control_op: 0x%x\n", (*this)->control_op);
 			printf("    pc: 0x%x\n", (*this)->pc_pc);
 			break;
 		case STAGE_DECODE:
@@ -477,7 +477,7 @@ int main(int argc, char** argv) {
 		same_pc_flag = core->pc_pc == prev_pc;
 		prev_pc = core->pc_pc;
 		core.step();
-		while (core->stage_active != (1 << STAGE_CONTROL)) {
+		while (core->stage_active != (1 << 0)) {
 			core.step();
 		}
 		printf("\n");
