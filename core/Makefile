@@ -2,6 +2,9 @@
 PROJECT_NAME := core
 BUILD_DIR := build
 
+# Makefile configuration
+SBY_MODULE ?= core
+
 # Project files
 TOP_VERILOG_SRC_FILE := verilog/core.sv
 VERILOG_SRC_FILES := \
@@ -110,7 +113,7 @@ $(OBJ_DIR)/test_prog.o: $(SIM_TEST_PROG_SRC_FILE)
 	@$(RISCV_CC) -march=rv32e -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles $^ -o $@
 
 sby:
-	@$(SBY) -d $(OBJ_DIR)/sby -f $(SBY_CONFIG_FILE)
+	@$(SBY) -d $(OBJ_DIR)/sby -f $(SBY_CONFIG_FILE) $(SBY_MODULE)
 
 all: build_sim gates_json
 

@@ -6,8 +6,11 @@ depth 8
 smtbmc yices
 
 [script]
-read -formal core.sv
-prep -top core
+--pycode-begin--
+early_log(workdir, "Verifying module: {}".format(taskname))
+output("read -formal {}.sv".format(taskname))
+output("prep -top {}".format(taskname))
+--pycode-end--
 
 [files]
 verilog/core.sv
