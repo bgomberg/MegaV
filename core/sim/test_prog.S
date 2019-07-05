@@ -13,9 +13,10 @@ irq_handler:
   beq   s0, s1, irq_handler_ebreak
   li    s1, 0x8000000b
   beq   s0, s1, irq_handler_ext
+  li    s1, 0x80000003
+  beq   s0, s1, irq_handler_sw
   # Default handler
-  ori   a5, a5, 0x8
-  addi  a5, a5, 0x100
+  addi  a5, a5, 0x700
   mret
 
 .section .text
@@ -47,6 +48,7 @@ l1:
 l2:
   ecall
   ebreak
+  csrsi mip, 0x08 # Trigger a SW interrupt
   ori   a5, a5, 0x10
   addi  a5, a5, 0x100
   j     .
@@ -72,6 +74,11 @@ irq_handler_ebreak:
 
 irq_handler_ext:
   ori   a5, a5, 0x04
+  addi  a5, a5, 0x100
+  mret
+
+irq_handler_sw:
+  ori   a5, a5, 0x08
   addi  a5, a5, 0x100
   mret
 

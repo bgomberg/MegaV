@@ -16,7 +16,8 @@ module csr #(
     input [11:0] addr_exception, // Address / exception value
     input [31:0] write_value, // Write value
     output [31:0] read_value, // Read value
-    output ext_int_pending, // External interrupt enabled
+    output ext_int_pending, // External interrupt pending
+    output sw_int_pending, // Software interrupt pending
     output busy, // Operation busy
     output fault // Fault condition
 );
@@ -24,6 +25,7 @@ module csr #(
     /* Outputs */
     reg [31:0] read_value;
     reg ext_int_pending;
+    reg sw_int_pending;
     reg busy;
     reg fault;
 
@@ -59,6 +61,7 @@ module csr #(
             ext_int_received <= 1'b0;
         end
         ext_int_pending <= external_interrupt_pending & external_interrupt_enabled & interrupts_enabled;
+        sw_int_pending <= software_interrupt_pending & software_interrupt_enabled & interrupts_enabled;
         if (~reset_n) begin
             interrupts_enabled <= 1'b0;
             prior_interrupts_enabled <= 1'b0;
@@ -97,6 +100,9 @@ module csr #(
                         fault <= 1'b0;
                         if (external_interrupt_pending && (addr_exception[4:0] == 5'b11011)) begin
                             external_interrupt_pending <= 1'b0;
+                        end
+                        if (software_interrupt_pending && (addr_exception[4:0] == 5'b10011)) begin
+                            software_interrupt_pending <= 1'b0;
                         end
                     end else if (op_is_mret) begin
                         // MRET

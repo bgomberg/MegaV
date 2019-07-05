@@ -4,10 +4,10 @@
 
 #include <stdio.h>
 
-#define FLASH_START 0x00
-#define FLASH_END 0xF0
-#define RAM_START 0xF0
-#define RAM_END 0x100
+#define FLASH_START 0x000
+#define FLASH_END 0x3F0
+#define RAM_START 0x3F0
+#define RAM_END 0x400
 
 #define BIT(VAL, POS) \
 	(((VAL) >> (POS)) & 1)

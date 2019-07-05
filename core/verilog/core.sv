@@ -43,7 +43,7 @@ module core(
         mem_access_fault,
         decode_ma_mem_microcode[3],
         csr_ext_int_pending,
-        1'b0, // TODO: SW interrupt
+        csr_sw_int_pending,
         stage_active,
         control_op,
         fault_num);
@@ -180,6 +180,7 @@ module core(
     wire csr_busy;
     wire csr_fault;
     wire csr_ext_int_pending;
+    wire csr_sw_int_pending;
     csr csr_module(
         clk,
         reset_n,
@@ -190,6 +191,7 @@ module core(
         csr_in,
         csr_read_value,
         csr_ext_int_pending,
+        csr_sw_int_pending,
         csr_busy,
         csr_fault
     );
