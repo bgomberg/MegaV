@@ -5,8 +5,8 @@ ENTRY(prog_entry)
 MEMORY
 {
   PROG_ENTRY_ROM (rx) : ORIGIN = 0x00000000, LENGTH = 0x10
-  PROG_ROM (rx)       : ORIGIN = 0x00000010, LENGTH = 0xB0
-  RAM (rw)            : ORIGIN = 0x000000C0, LENGTH = 0x40
+  PROG_ROM (rx)       : ORIGIN = 0x00000010, LENGTH = 0xE0
+  RAM (rw)            : ORIGIN = 0x000000F0, LENGTH = 0x10
 }
 
 SECTIONS

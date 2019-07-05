@@ -4,6 +4,11 @@
 
 #include <stdio.h>
 
+#define FLASH_START 0x00
+#define FLASH_END 0xF0
+#define RAM_START 0xF0
+#define RAM_END 0x100
+
 #define BIT(VAL, POS) \
 	(((VAL) >> (POS)) & 1)
 
@@ -15,8 +20,8 @@ typedef struct {
 
 static const Vmodule_core* m_core;
 static mem_op_t m_mem_op;
-static uint8_t m_flash[0xC0];
-static uint8_t m_ram[0x40];
+static uint8_t m_flash[RAM_START];
+static uint8_t m_ram[RAM_END-RAM_END];
 
 void mem_init(const Vmodule_core* core, const void *data, size_t len) {
 	m_core = core;
@@ -29,9 +34,9 @@ void mem_init(const Vmodule_core* core, const void *data, size_t len) {
 
 void mem_dump_ram(void) {
 	printf("Memory:\n");
-	for (int i = 0xC0; i < 0x100; i += 4) {
+	for (int i = RAM_START; i < RAM_END; i += 4) {
 		uint32_t value;
-		memcpy(&value, &m_ram[i-0xC0], sizeof(value));
+		memcpy(&value, &m_ram[i-RAM_START], sizeof(value));
 		if (value) {
 			printf("  [0x%x] = 0x%x\n", i, value);
 		}
@@ -39,10 +44,10 @@ void mem_dump_ram(void) {
 }
 
 static uint8_t mem_read_byte(int addr) {
-	if (addr >= 0 && addr < 0xC0) {
+	if (addr >= 0 && addr < RAM_START) {
 		return m_flash[addr];
-	} else if (addr >= 0xC0 && addr < 0x100) {
-		return m_ram[addr-0xC0];
+	} else if (addr >= RAM_START && addr < RAM_END) {
+		return m_ram[addr-RAM_START];
 	} else {
 		printf("!!! Invalid read addr\n");
 		exit(1);
@@ -50,8 +55,8 @@ static uint8_t mem_read_byte(int addr) {
 }
 
 static void mem_write_byte(int addr, char data) {
-	if (addr >= 0xC0 && addr < 0x100) {
-		m_ram[addr-0xC0] = data;
+	if (addr >= RAM_START && addr < RAM_END) {
+		m_ram[addr-RAM_START] = data;
 	} else {
 		printf("!!! Invalid write addr\n");
 		exit(1);
@@ -68,7 +73,7 @@ svBit mem_op_setup() {
 		// Address misaligned
 		return 1;
 	}
-	if (addr < 0 || (m_core->mem_module->is_write && addr < 0xC0) || addr >= 0x100) {
+	if (addr < 0 || (m_core->mem_module->is_write && addr < RAM_START) || addr >= RAM_END) {
 		// Access fault
 		return 1;
 	}

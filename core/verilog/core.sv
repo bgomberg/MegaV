@@ -31,6 +31,8 @@ module core(
     wire [1:0] control_op /* verilator public */;
     wire control_op_normal = control_op[1] & control_op[0];
     wire control_op_trap = ~control_op[1] & ~control_op[0];
+    wire control_op_ext_int = ~control_op[1] & control_op[0];
+    wire control_op_sw_int = control_op[1] & ~control_op[0];
     reg [2:0] fault_num /* verilator public */;
     fsm fsm_module(
         clk,
@@ -40,7 +42,7 @@ module core(
         mem_addr_fault,
         mem_access_fault,
         decode_ma_mem_microcode[3],
-        ext_int,
+        csr_ext_int_pending,
         1'b0, // TODO: SW interrupt
         stage_active,
         control_op,
@@ -111,7 +113,7 @@ module core(
     wire decode_has_mem_stage;
     wire decode_has_read_stage;
     wire decode_fault;
-    wire [31:0] instr /* verilator public */ = control_op_normal ? mem_out : 32'h00000073;
+    wire [31:0] instr /* verilator public */ = control_op_normal ? mem_out : 32'h00000073; // interrupt using ECALL
     wire decode_busy;
     instruction_decode decode_module(
         clk,
@@ -167,22 +169,27 @@ module core(
         alu_fault);
 
     /* CSR */
-    wire [11:0] csr_addr_exception /* verilator public */ = control_op_trap ? {9'b0, fault_num} : decode_ex_csr_microcode[14:3];
+    wire [3:0] csr_trap_num = control_op_trap ? {1'b0, fault_num} : {control_op_ext_int, 3'b011};
+    wire [11:0] csr_addr_exception /* verilator public */ = control_op_normal ? decode_ex_csr_microcode[14:3] :
+        {7'b0, control_op_ext_int | control_op_sw_int, csr_trap_num};
     wire [31:0] csr_in /* verilator public */ = (decode_csr_mux_position == 2'b00) ? rf_read_data_a : (
         (decode_csr_mux_position == 2'b01) ? decode_imm : (
-        (decode_csr_mux_position == 2'b10) ? (control_op_trap ? pc_pc : pc_next_pc) :
+        (decode_csr_mux_position == 2'b10) ? (~control_op_normal ? pc_pc : pc_next_pc) :
         32'b0));
     wire [31:0] csr_read_value /* verilator public */;
     wire csr_busy;
     wire csr_fault;
+    wire csr_ext_int_pending;
     csr csr_module(
         clk,
         reset_n,
         stage_active[`STAGE_EXECUTE] & decode_ex_csr_microcode[15],
+        ext_int,
         decode_ex_csr_microcode[2:0],
         csr_addr_exception,
         csr_in,
         csr_read_value,
+        csr_ext_int_pending,
         csr_busy,
         csr_fault
     );

@@ -281,6 +281,7 @@ public:
 	Core() : module_(new Vmodule()) {
 		module_->clk = 0;
 		module_->reset_n = 1;
+		module_->ext_int = 0;
 	}
 
 	~Core() {
@@ -300,7 +301,11 @@ public:
 		module_->reset_n = 1;
 	}
 
-	void step() {
+	void set_ext_int(bool value) {
+		module_->ext_int = value;
+	}
+
+	void microstep() {
 		// Print info no the stage we're about to execute
 		const int prev_stage_num = get_stage_num();
 		switch (prev_stage_num) {
@@ -401,6 +406,13 @@ public:
 		}
 	}
 
+	void step() {
+		do {
+			microstep();
+		} while ((*this)->stage_active != (1 << 0));
+		printf("\n");
+	}
+
 private:
 	Vmodule* module_;
 
@@ -469,7 +481,8 @@ int main(int argc, char** argv) {
 	uint32_t prev_pc = UINT32_MAX;
 	bool same_pc_flag = false;
 	int watchdog_instr_left = 100;
-	while (core->pc_pc != prev_pc || !same_pc_flag) {
+	bool triggered_ext_int = false;
+	while (true) {
 		if (watchdog_instr_left-- <= 0) {
 			fprintf(stderr, "Watchdog!!!\n");
 			exit(1);
@@ -477,10 +490,18 @@ int main(int argc, char** argv) {
 		same_pc_flag = core->pc_pc == prev_pc;
 		prev_pc = core->pc_pc;
 		core.step();
-		while (core->stage_active != (1 << 0)) {
+		if (core->pc_pc == prev_pc && same_pc_flag) {
+			if (triggered_ext_int) {
+				break;
+			}
+			triggered_ext_int = true;
+			same_pc_flag = false;
+			printf(">>>>> Setting external interrupt high\n\n");
+			core.set_ext_int(true);
 			core.step();
+			core.set_ext_int(false);
+			printf(">>>>> Setting external interrupt low\n\n");
 		}
-		printf("\n");
 	}
 
 	// Dump the non-zero registers and memory

@@ -11,16 +11,19 @@ module csr #(
     input clk, // Clock signal
     input reset_n, // Reset signal (active low)
     input available, // Operation available
+    input ext_int, // External interrupt (ignores the available input)
     input [2:0] op, // (3'b000=Exception, 3'b001=MRET, 3'b101=CSRRW, 3'b110=CSRRS, 3'b111=CSRRC)
     input [11:0] addr_exception, // Address / exception value
     input [31:0] write_value, // Write value
     output [31:0] read_value, // Read value
+    output ext_int_pending, // External interrupt enabled
     output busy, // Operation busy
     output fault // Fault condition
 );
 
     /* Outputs */
     reg [31:0] read_value;
+    reg ext_int_pending;
     reg busy;
     reg fault;
 
@@ -45,7 +48,17 @@ module csr #(
 
     /* Logic */
     reg [1:0] state;
+    reg ext_int_received;
     always @(posedge clk) begin
+        if (ext_int & ~ext_int_received) begin
+            // rising edge of ext_int and we haven't yet received one
+            ext_int_received <= 1'b1;
+            external_interrupt_pending <= 1'b1;
+        end else if (~ext_int & ext_int_received) begin
+            // falling edge of ext_int - clear ext_int_received so we can receive another one
+            ext_int_received <= 1'b0;
+        end
+        ext_int_pending <= external_interrupt_pending & external_interrupt_enabled & interrupts_enabled;
         if (~reset_n) begin
             interrupts_enabled <= 1'b0;
             prior_interrupts_enabled <= 1'b0;
@@ -60,6 +73,7 @@ module csr #(
             busy <= 1'b0;
             state <= `STATE_IDLE;
             fault <= 1'b0;
+            ext_int_received <= 1'b0;
         end else begin
             case (state)
                 `STATE_IDLE: begin
@@ -81,6 +95,9 @@ module csr #(
                         prior_interrupts_enabled <= interrupts_enabled;
                         interrupts_enabled <= 1'b0;
                         fault <= 1'b0;
+                        if (external_interrupt_pending && (addr_exception[4:0] == 5'b11011)) begin
+                            external_interrupt_pending <= 1'b0;
+                        end
                     end else if (op_is_mret) begin
                         // MRET
                         read_value <= exception_pc;
@@ -183,6 +200,7 @@ module csr #(
     initial f_past_valid = 1'b0;
     always @(posedge clk) begin
         f_past_valid = 1;
+        assume(~ext_int);
     end
 
     always @(posedge clk) begin

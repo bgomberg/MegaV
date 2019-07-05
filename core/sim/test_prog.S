@@ -7,26 +7,24 @@ prog_entry:
 irq_handler:
   # Handle the interrupt
   csrr  s0, mcause
-  li    s1, 0xb
+  li    s1, 0x0000000b
   beq   s0, s1, irq_handler_ecall
-  li    s1, 0x3
+  li    s1, 0x00000003
   beq   s0, s1, irq_handler_ebreak
+  li    s1, 0x8000000b
+  beq   s0, s1, irq_handler_ext
   # Default handler
-  ori   a5, a5, 0x40
-  j     .
-
-irq_handler_ecall:
+  ori   a5, a5, 0x8
+  addi  a5, a5, 0x100
   mret
-
-irq_handler_ebreak:
-  ori   a5, a5, 0x02
-  lw    a0, 0x400(x0) # Trigger a memory access fault
-  ori   a5, a5, 0xff
 
 .section .text
 main:
   # Enable interrupts
-  csrsi mstatus,0x08
+  li    t0, 0x808
+  csrs  mstatus, t0
+  li    t0, 0x808
+  csrs  mie, t0
   fence
   fence.i
   j     l1
@@ -49,6 +47,9 @@ l1:
 l2:
   ecall
   ebreak
+  ori   a5, a5, 0x10
+  addi  a5, a5, 0x100
+  j     .
 
 l3:
   addi  a2, a2, 0x01
@@ -58,6 +59,21 @@ l3:
 
 l4:
   jal   gp, l2
+
+irq_handler_ecall:
+  ori   a5, a5, 0x01
+  addi  a5, a5, 0x100
+  mret
+
+irq_handler_ebreak:
+  ori   a5, a5, 0x02
+  addi  a5, a5, 0x100
+  mret
+
+irq_handler_ext:
+  ori   a5, a5, 0x04
+  addi  a5, a5, 0x100
+  mret
 
 .section .bss
 test_bss_var:
