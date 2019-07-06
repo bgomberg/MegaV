@@ -1,7 +1,3 @@
-`define STATE_IDLE          2'b00
-`define STATE_IN_PROGRESS   2'b01
-`define STATE_DONE          2'b10
-
 /*
  * A decoder for the RV32I instruction set.
  */
@@ -110,6 +106,8 @@ module instruction_decode(
     wire invalid_rd = (wb_rf_enable & rd[4]) | ((opcode_is_fence | instr_is_system_e_mret) & ~rd_is_zero);
 
     /* Immediate Signals Decode */
+    wire [19:0] imm_lower_lui_auipc = {rs1, funct3, 12'b0};
+    wire [19:0] imm_lower_system = {15'b0, rs1};
     wire [19:0] imm_lower_jal = {rs1, funct3, rs2[0], funct7[5:0], rs2 & 5'b11110};
     wire [19:0] imm_lower_non_jal = {
         {8{funct7[6]}},
@@ -117,107 +115,76 @@ module instruction_decode(
         (opcode_is_branch | opcode_is_store) ? rd & {4'b1111, ~opcode_is_branch} : rs2
     };
 
-    reg [1:0] state;
+    /* Logic */
+    reg started;
     wire invalid_instr = invalid_opcode | invalid_rs | invalid_funct7 | invalid_funct3 | invalid_rd;
     always @(posedge clk) begin
-        if (~reset_n) begin
-            busy <= 1'b0;
-            state <= `STATE_IDLE;
-            fault <= 1'b0;
-        end else begin
-            case (state)
-                `STATE_IDLE: begin
-                    if (available) begin
-                        // Starting a new operation
-                        state <= `STATE_IN_PROGRESS;
-                        busy <= 1'b1;
-                    end else begin
-                        fault <= 1'b0;
-                        busy <= 1'b0;
-                    end
-                end
-                `STATE_IN_PROGRESS: begin
-                    /* Read Stage */
-                    rd_rf_microcode <= {
-                        ~invalid_instr & rd_rf_enable,
-                        rs1[3:0],
-                        rs2[3:0]
-                    };
+        busy <= reset_n & ~started & available;
+        started <= reset_n & available;
+        fault <= reset_n & ((busy & started) ? invalid_instr : fault);
+        if (reset_n & busy & started) begin
+            /* Read Stage */
+            rd_rf_microcode <= {
+                ~invalid_instr & rd_rf_enable,
+                rs1[3:0],
+                rs2[3:0]
+            };
 
-                    /* Execute Stage */
-                    ex_alu_microcode <= {
-                        ~invalid_instr & (opcode_is_op | opcode_is_opimm | opcode_is_branch | opcode_is_load | opcode_is_store | opcode_is_auipc |
-                            opcode_is_jalr),
-                        opcode_is_branch,
-                        funct7[5] & ~funct3[1] & (opcode_is_op | opcode_is_opimm) & (opcode_is_op | funct3[2]) &
-                            (funct3[2] | ~funct3[0]) & (~funct3[2] | funct3[0]),
-                        ({3{opcode_is_op | opcode_is_opimm | opcode_is_branch}} & funct3)
-                    };
-                    ex_csr_microcode <= {
-                        ~invalid_instr & opcode_is_system,
-                        instr_is_system_e ? {8'b0, ~rs2[0], 3'b011} : {funct7, rs2},
-                        instr_is_system_csr,
-                        funct3[1],
-                        funct3[0] | instr_is_system_mret
-                    };
+            /* Execute Stage */
+            ex_alu_microcode <= {
+                ~invalid_instr & (opcode_is_op | opcode_is_opimm | opcode_is_branch | opcode_is_load | opcode_is_store | opcode_is_auipc |
+                    opcode_is_jalr),
+                opcode_is_branch,
+                funct7[5] & ~funct3[1] & (opcode_is_op | opcode_is_opimm) & (opcode_is_op | funct3[2]) &
+                    (funct3[2] | ~funct3[0]) & (~funct3[2] | funct3[0]),
+                ({3{opcode_is_op | opcode_is_opimm | opcode_is_branch}} & funct3)
+            };
+            ex_csr_microcode <= {
+                ~invalid_instr & opcode_is_system,
+                instr_is_system_e ? {8'b0, ~rs2[0], 3'b011} : {funct7, rs2},
+                instr_is_system_csr,
+                funct3[1],
+                funct3[0] | instr_is_system_mret
+            };
 
-                    /* Memory Stage */
-                    ma_mem_microcode <= {
-                        ~invalid_instr & (opcode_is_load | opcode_is_store),
-                        opcode_is_store,
-                        funct3
-                    };
+            /* Memory Stage */
+            ma_mem_microcode <= {
+                ~invalid_instr & (opcode_is_load | opcode_is_store),
+                opcode_is_store,
+                funct3
+            };
 
-                    /* Write Back Stage */
-                    wb_rf_microcode <= {
-                        ~invalid_instr & wb_rf_enable,
-                        1'b1,
-                        rd[3:0],
-                        4'b0
-                    };
+            /* Write Back Stage */
+            wb_rf_microcode <= {
+                ~invalid_instr & wb_rf_enable,
+                1'b1,
+                rd[3:0],
+                4'b0
+            };
 
-                    /* Immediate Signals */
-                    if (opcode_is_lui | opcode_is_auipc) begin
-                        imm <= {funct7, rs2, rs1, funct3, 12'b0};
-                    end else if (opcode_is_system) begin
-                        imm <= {27'b0, rs1};
-                    end else begin
-                        imm <= {{12{funct7[6]}}, opcode_is_jal ? imm_lower_jal : imm_lower_non_jal};
-                    end
+            /* Immediate Signals */
+            imm[31:20] <= (opcode_is_lui | opcode_is_auipc) ? {funct7, rs2} : {12{~opcode_is_system & funct7[6]}};
+            imm[19:0] <= (opcode_is_lui | opcode_is_auipc) ? imm_lower_lui_auipc : (
+                opcode_is_system ? imm_lower_system : (
+                opcode_is_jal ? imm_lower_jal : imm_lower_non_jal));
 
-                    /* Fault Signal */
-                    fault <= invalid_instr;
-
-                    /* Mux Position Signals */
-                    alu_a_mux_position <= instr_is_system_e | opcode_is_auipc;
-                    alu_b_mux_position <= ~opcode_is_branch & ~opcode_is_op;
-                    csr_mux_position <= {instr_is_system_e, instr_is_system_csr & funct3[2]};
-                    wb_mux_position <= {
-                        (opcode_is_load | opcode_is_jalr | opcode_is_jal),
-                        (opcode_is_lui | opcode_is_jalr | opcode_is_jal)
-                    };
-                    wb_pc_mux_position <= {
-                        (opcode_is_branch | opcode_is_jal),
-                        (opcode_is_jalr | opcode_is_branch | instr_is_system_e_mret)
-                    };
-
-                    // operation is complete
-                    busy <= 1'b0;
-                    state <= `STATE_DONE;
-                end
-                `STATE_DONE: begin
-                    if (!available) begin
-                        state <= `STATE_IDLE;
-                    end
-                end
-                default: begin
-                    // should never get here
-                end
-            endcase
+            /* Mux Position Signals */
+            alu_a_mux_position <= instr_is_system_e | opcode_is_auipc;
+            alu_b_mux_position <= ~opcode_is_branch & ~opcode_is_op;
+            csr_mux_position <= {instr_is_system_e, instr_is_system_csr & funct3[2]};
+            wb_mux_position <= {
+                (opcode_is_load | opcode_is_jalr | opcode_is_jal),
+                (opcode_is_lui | opcode_is_jalr | opcode_is_jal)
+            };
+            wb_pc_mux_position <= {
+                (opcode_is_branch | opcode_is_jal),
+                (opcode_is_jalr | opcode_is_branch | instr_is_system_e_mret)
+            };
         end
     end
 
 `ifdef FORMAL
+    initial assume(~reset_n);
     reg f_past_valid;
     initial f_past_valid = 0;
     always @(posedge clk) begin
@@ -237,11 +204,17 @@ module instruction_decode(
     wire has_ma_stage = ma_mem_microcode[4];
     always @(posedge clk) begin
         if (f_past_valid) begin
-            assume(state != 2'b11);
-            if ($past(~reset_n)) begin
+            assume(started | ~busy);
+            if (available) begin
+                assume($stable(instr));
+            end
+            if (busy) begin
+                assume(available);
+            end
+            if (!$past(reset_n)) begin
                 assert(!busy);
                 assert(!fault);
-            end else if (state == `STATE_DONE && $past(state) == `STATE_IN_PROGRESS) begin
+            end else if ($past(busy) && !busy) begin
                 case ($past(instr[6:0]))
                     7'b0110111: begin // LUI
                         assert($past(opcode_is_lui));

@@ -52,7 +52,7 @@ module memory(
         op_fault <= reset_n & available & op_is_invalid;
         access_fault <= reset_n & available & mem_op_setup();
         out <= mem_read_get_result();
-        started <= reset_n & ((started & (available | busy)) | (~busy & available & ~mem_op_setup()));
+        started <= reset_n & ((started & busy) | (~busy & available & ~mem_op_setup()));
         busy <= reset_n & ((~started & ~busy & available & ~mem_op_setup()) | (busy & mem_op_is_busy()));
     end
 
