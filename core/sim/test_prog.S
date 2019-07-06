@@ -34,7 +34,6 @@ main:
 
 l1:
   csrr  a3, mstatus
-  csrr  a4, mtvec
   li    t0, 0x11
   li    t1, 0x31
   add   t1, t0, t1
