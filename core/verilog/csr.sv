@@ -85,7 +85,7 @@ module csr #(
     always @(posedge clk) begin
         ext_int_pending <= reset_n & external_interrupt_pending & external_interrupt_enabled & interrupts_enabled;
         sw_int_pending <= reset_n & software_interrupt_pending & software_interrupt_enabled & interrupts_enabled;
-        fault <= reset_n & busy & available & (op_is_invalid | (op_is_csr & csr_access_error));
+        fault <= reset_n & available & (op_is_invalid | (op_is_csr & csr_access_error));
         busy <= reset_n & ~started & available;
         started <= reset_n & available;
         read_value <= should_perform_op ? read_value_value : read_value;

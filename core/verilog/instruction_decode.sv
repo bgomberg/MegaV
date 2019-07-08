@@ -121,7 +121,7 @@ module instruction_decode(
     always @(posedge clk) begin
         busy <= reset_n & ~started & available;
         started <= reset_n & available;
-        fault <= reset_n & ((busy & started) ? invalid_instr : fault);
+        fault <= reset_n & available & invalid_instr;
         if (reset_n & busy & started) begin
             /* Read Stage */
             rd_rf_microcode <= {

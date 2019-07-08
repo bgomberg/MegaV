@@ -13,7 +13,7 @@ module adder32_sync(
     reg [31:0] out;
 
     wire [31:0] sum;
-    adder32 offset_pc_adder_module(
+    adder32 addr_module(
         a ^ b,
         a & b,
         1'b0,

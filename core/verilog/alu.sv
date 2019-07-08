@@ -1,8 +1,13 @@
 `include "adder32.sv"
 
-`define STATE_IDLE          2'b00
-`define STATE_IN_PROGRESS   2'b01
-`define STATE_DONE          2'b10
+function [31:0] reverse_bit_order(input [31:0] data);
+integer i;
+begin
+    for (i = 0; i < 32; i = i + 1) begin
+        reverse_bit_order[31-i] = data[i];
+    end
+end
+endfunction
 
 /*
  * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I/E instruction set.
@@ -25,7 +30,9 @@ module alu(
     reg fault;
 
     /* Op decoding */
-    wire op_is_sub = op[3];
+    wire op_is_add = (op == 5'b00000);
+    wire op_shift_is_right = op[2];
+    wire op_shift_is_right_arithmetic = op_shift_is_right & op[3];
     wire is_invalid_op = (op[3] & op[1]) | (op[4] & op[3]) | (op[3] & ~op[2] & op[0]) | (op[3] & op[2] & ~op[0]) | (op[4] & ~op[2] & op[1]);
 
     /* Bitwise operations */
@@ -34,75 +41,46 @@ module alu(
     wire [31:0] and_result = in_a & in_b;
 
     /* Adder */
-    wire [31:0] adder_b = in_b ^ {32{op_is_sub}};
+    wire [31:0] adder_b = in_b ^ {32{~op_is_add}};
     wire [31:0] adder_sum;
-    adder32 adder(
+    adder32 adder_module(
         in_a ^ adder_b,
         in_a & adder_b,
-        op_is_sub,
+        ~op_is_add,
         adder_sum);
 
-    /* Comparison operations */
-    wire signed_lt_result = ($signed(in_a) < $signed(in_b)) ? 1'b1 : 1'b0;
-    wire unsigned_lt_result = (in_a < in_b) ? 1'b1 : 1'b0;
-    wire eq_result = (xor_result == 32'b0) ? 1'b1 : 1'b0;
+    /* Shifters */
+    wire shift_in_bit = op_shift_is_right_arithmetic & in_a[31];
+    wire [31:0] shift_in = op_shift_is_right ? reverse_bit_order(in_a) : in_a;
+    wire [31:0] shift_int_1 = in_b[4] ? {shift_in[15:0], {16{shift_in_bit}}} : shift_in;
+    wire [31:0] shift_int_2 = in_b[3] ? {shift_int_1[23:0], {8{shift_in_bit}}} : shift_int_1;
+    wire [31:0] shift_int_3 = in_b[2] ? {shift_int_2[27:0], {4{shift_in_bit}}} : shift_int_2;
+    wire [31:0] shift_int_4 = in_b[1] ? {shift_int_3[29:0], {2{shift_in_bit}}} : shift_int_3;
+    wire [31:0] shift_int_5 = in_b[0] ? {shift_int_4[30:0], shift_in_bit} : shift_int_4;
+    wire [31:0] shift_result = op_shift_is_right ? reverse_bit_order(shift_int_5) : shift_int_5;
 
     /* Logic */
-    reg [1:0] state;
+    wire eq_result = (xor_result == 32'b0);
+    wire lt_ltu_result = (op[2] & op[1]) ^ adder_sum[31];
+    wire branch_slt_sltu_result = ((op[4] & ~op[2]) ? eq_result : lt_ltu_result) ^ op[0];
+    reg started;
     always @(posedge clk) begin
-        if (~reset_n) begin
-            busy <= 1'b0;
-            state <= `STATE_IDLE;
-            fault <= 1'b0;
-        end else begin
-            fault <= available & is_invalid_op;
-            case (state)
-                `STATE_IDLE: begin
-                    if (available) begin
-                        // Starting a new operation
-                        busy <= 1'b1;
-                        state <= `STATE_IN_PROGRESS;
-                    end else begin
-                        busy <= 1'b0;
-                    end
-                end
-                `STATE_IN_PROGRESS: begin
-                    if (~op[4] & (op[2:0] == 3'b0)) // ADD,SUB
-                        out <= adder_sum;
-                    else if (op == 5'b00001) // SLL
-                        out <= in_a << in_b[4:0];
-                    else if (op[4:1] == 4'b0001) // SLT,SLTU
-                        out <= {31'b0, ((op[0] & unsigned_lt_result) | (~op[0] & signed_lt_result))};
-                    else if (op == 5'b00100) // XOR
-                        out <= xor_result;
-                    else if (op == 5'b00101) // SRL
-                        out <= in_a >> in_b[4:0];
-                    else if (op == 5'b00110) // OR
-                        out <= or_result;
-                    else if (op == 5'b00111) // AND
-                        out <= and_result;
-                    else if (op == 5'b01101) // SRA
-                        out <= in_a >>> in_b[4:0];
-                    else if (op[4:1] == 4'b1000) // BEQ,BNE
-                        out <= {31'b0, eq_result ^ op[0]};
-                    else if (op[4:2] == 3'b101) // BLT,BGE,BLTU,BGEU
-                        out <= {31'b0, ((op[1] & unsigned_lt_result) | (~op[1] & signed_lt_result)) ^ op[0]};
-                    // Operation is complete
-                    busy <= 1'b0;
-                    state <= `STATE_DONE;
-                end
-                `STATE_DONE: begin
-                    if (!available) begin
-                        busy <= 1'b0;
-                        state <= `STATE_IDLE;
-                    end else begin
-                        busy <= 1'b1;
-                    end
-                end
-                default: begin
-                    // should never get here
-                end
-            endcase
+        busy <= reset_n & ~started & available;
+        started <= reset_n & available;
+        fault <= reset_n & available & is_invalid_op;
+        if (reset_n & busy & started) begin
+            if (~op[4] & ~op[2] & ~op[1] & ~op[0]) // ADD,SUB
+                out <= adder_sum;
+            else if (~op[4] & op[2] & ~op[1] & ~op[0]) // XOR
+                out <= xor_result;
+            else if (~op[4] & op[2] & op[1] & ~op[0]) // OR
+                out <= or_result;
+            else if (~op[4] & op[2] & op[1] & op[0]) // AND
+                out <= and_result;
+            else if (~op[4] & ~op[1] & op[0]) // SLL,SRL,SRA
+                out <= shift_result;
+            else // SLT,SLTU,BEQ,BNE,BLT,BGE,BTLU,BGEU
+                out <= {31'b0, branch_slt_sltu_result};
         end
     end
 
@@ -117,11 +95,19 @@ module alu(
     /* Validate logic */
     always @(posedge clk) begin
         if (f_past_valid) begin
-            assume(state != 2'b11);
+            assume(started | ~busy);
+            if (available) begin
+                assume($stable(op));
+                assume($stable(in_a));
+                assume($stable(in_b));
+            end
+            if (busy) begin
+                assume(available);
+            end
             if ($past(~reset_n)) begin
                 assert(!busy);
                 assert(!fault);
-            end else if ($past(available) && !busy) begin
+            end else if ($past(busy) && !busy) begin
                 case ($past(op))
                     5'b0000: begin // ADD
                         assert(!fault);
