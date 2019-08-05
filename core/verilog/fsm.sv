@@ -5,7 +5,8 @@
 `define STAGE_EXECUTE 4
 `define STAGE_MEMORY 5
 `define STAGE_WRITE_BACK 6
-`define NUM_STAGES 7
+`define STAGE_UPDATE_PC 7
+`define NUM_STAGES 8
 
 /*
  * FSM.

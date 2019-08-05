@@ -17,7 +17,8 @@
 #define STAGE_EXECUTE 4
 #define STAGE_MEMORY 5
 #define STAGE_WRITE_BACK 6
-#define NUM_STAGES 7
+#define STAGE_UPDATE_PC 7
+#define NUM_STAGES 8
 
 #define BIT(VAL, POS) \
 	(((VAL) >> (POS)) & 1)
@@ -347,6 +348,10 @@ public:
 			printf("Executing STAGE_WRITE_BACK\n");
 			printf("  Inputs:\n");
 			printf("    write_data: 0x%x\n", (*this)->rf_write_data);
+			break;
+		case STAGE_UPDATE_PC:
+			printf("Executing STAGE_UPDATE_PC\n");
+			printf("  Inputs:\n");
 			printf("    next_pc: 0x%x\n", (*this)->pc_next_pc);
 			break;
 		default:
@@ -397,6 +402,9 @@ public:
 			printf("    out: 0x%x\n", (*this)->mem_out);
 			break;
 		case STAGE_WRITE_BACK:
+			printf("  Outputs:\n");
+			break;
+		case STAGE_UPDATE_PC:
 			printf("  Outputs:\n");
 			break;
 		default:

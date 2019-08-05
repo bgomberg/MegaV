@@ -3,7 +3,6 @@
 `include "instruction_decode.sv"
 `include "register_file.sv"
 `include "alu.sv"
-`include "adder32_sync.sv"
 `include "csr.sv"
 `include "fsm.sv"
 
@@ -24,7 +23,8 @@ module core(
     assign stage_done[`STAGE_READ] = ~rf_busy;
     assign stage_done[`STAGE_EXECUTE] = ~alu_busy & ~csr_busy;
     assign stage_done[`STAGE_MEMORY] = ~mem_busy;
-    assign stage_done[`STAGE_WRITE_BACK] = ~pc_busy & ~rf_busy;
+    assign stage_done[`STAGE_WRITE_BACK] = ~rf_busy & ~alu_busy;
+    assign stage_done[`STAGE_UPDATE_PC] = ~pc_busy;
     /* verilator lint_off UNOPT */
     wire [`NUM_STAGES-1:0] stage_active /* verilator public */;
     /* verilator lint_on UNOPT */
@@ -53,20 +53,15 @@ module core(
     reg [31:0] pc_next_pc /* verilator public */;
     reg [31:0] pc_offset_pc /* verilator public */;
     wire [31:0] pc_in = (~decode_wb_pc_mux_position[1] & decode_wb_pc_mux_position[0]) ? ex_out : (
-        (decode_wb_pc_mux_position[1] & (~decode_wb_pc_mux_position[0] | alu_out[0])) ? pc_offset_pc : pc_next_pc);
+        (decode_wb_pc_mux_position[1] & (~decode_wb_pc_mux_position[0] | ex_alu_out[0])) ? pc_offset_pc : pc_next_pc);
     wire pc_busy;
     program_counter pc_module(
         clk,
         reset_n,
-        stage_active[`STAGE_WRITE_BACK],
+        stage_active[`STAGE_UPDATE_PC],
         pc_in,
         pc_pc,
         pc_busy);
-    adder32_sync offset_pc_adder_module(
-        clk & stage_active[`STAGE_MEMORY],
-        pc_pc,
-        decode_imm,
-        pc_offset_pc);
 
     /* Memory */
     wire [31:0] mem_out /* verilator public */;
@@ -81,7 +76,7 @@ module core(
         stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[3],
         stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[2],
         stage_active[`STAGE_FETCH] ? 2'b10 : decode_ma_mem_microcode[1:0],
-        stage_active[`STAGE_FETCH] ? pc_pc : alu_out,
+        stage_active[`STAGE_FETCH] ? pc_pc : ex_alu_out,
         rf_read_data_b,
         mem_out,
         mem_busy,
@@ -128,7 +123,7 @@ module core(
         decode_fault);
 
     /* Register file */
-    wire [31:0] ex_out = decode_ex_alu_microcode[5] ? alu_out : csr_read_value;
+    wire [31:0] ex_out = decode_ex_alu_microcode[5] ? ex_alu_out : csr_read_value;
     wire [31:0] rf_write_data /* verilator public */ = (decode_wb_mux_position == 2'b00) ? ex_out : (
         (decode_wb_mux_position == 2'b01) ? decode_imm : (
         (decode_wb_mux_position == 2'b10) ? mem_out :
@@ -150,15 +145,16 @@ module core(
         rf_busy);
 
     /* ALU */
+    reg [31:0] ex_alu_out;
     wire [31:0] alu_out /* verilator public */;
-    wire [31:0] alu_in_a = (stage_active[`STAGE_FETCH] | decode_alu_a_mux_position) ? pc_pc : rf_read_data_a;
-    wire [31:0] alu_in_b = stage_active[`STAGE_FETCH] ? 32'h00000004 : (decode_alu_b_mux_position ? decode_imm : rf_read_data_b);
+    wire [31:0] alu_in_a = (stage_active[`STAGE_FETCH] | stage_active[`STAGE_WRITE_BACK] | decode_alu_a_mux_position) ? pc_pc : rf_read_data_a;
+    wire [31:0] alu_in_b = stage_active[`STAGE_FETCH] ? 32'h00000004 : ((stage_active[`STAGE_WRITE_BACK] | decode_alu_b_mux_position) ? decode_imm : rf_read_data_b);
     wire alu_busy;
     wire alu_fault;
     alu alu_module(
         clk,
         reset_n,
-        stage_active[`STAGE_FETCH] | (stage_active[`STAGE_EXECUTE] & decode_ex_alu_microcode[5]),
+        stage_active[`STAGE_FETCH] | stage_active[`STAGE_WRITE_BACK] | (stage_active[`STAGE_EXECUTE] & decode_ex_alu_microcode[5]),
         {5{stage_active[`STAGE_EXECUTE]}} & decode_ex_alu_microcode[4:0],
         alu_in_a,
         alu_in_b,
@@ -166,8 +162,12 @@ module core(
         alu_busy,
         alu_fault);
     always @(posedge clk) begin
-        if (stage_active[`STAGE_FETCH]) begin
+        if (stage_active[`STAGE_FETCH] & ~alu_busy) begin
             pc_next_pc <= alu_out;
+        end else if (stage_active[`STAGE_EXECUTE] & ~alu_busy) begin
+            ex_alu_out <= alu_out;
+        end else if (stage_active[`STAGE_WRITE_BACK] & ~alu_busy) begin
+            pc_offset_pc <= alu_out;
         end
     end
 
