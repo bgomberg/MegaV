@@ -20,8 +20,10 @@ VERILOG_SRC_FILES := \
 	verilog/fsm.sv
 SIM_SRC_FILES := \
 	sim/sim_main.cpp \
+	sim/decode.cpp \
 	sim/mem.cpp
 SIM_HEADER_FILES := \
+	sim/decode.h \
 	sim/mem.h
 SIM_TEST_PROG_SRC_FILE := sim/test_prog.S
 SBY_CONFIG_FILE := scripts/verify.sby

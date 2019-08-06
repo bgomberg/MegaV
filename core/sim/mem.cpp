@@ -4,10 +4,9 @@
 
 #include <stdio.h>
 
-#define FLASH_START 0x000
-#define FLASH_END 0x3F0
-#define RAM_START 0x3F0
-#define RAM_END 0x400
+#define RAM_START 0x400
+#define RAM_SIZE 0x800
+#define RAM_END (RAM_START + RAM_SIZE)
 
 #define BIT(VAL, POS) \
 	(((VAL) >> (POS)) & 1)
@@ -21,7 +20,7 @@ typedef struct {
 static const Vmodule_core* m_core;
 static mem_op_t m_mem_op;
 static uint8_t m_flash[RAM_START];
-static uint8_t m_ram[RAM_END-RAM_END];
+static uint8_t m_ram[RAM_SIZE];
 
 void mem_init(const Vmodule_core* core, const void *data, size_t len) {
 	m_core = core;
@@ -34,11 +33,11 @@ void mem_init(const Vmodule_core* core, const void *data, size_t len) {
 
 void mem_dump_ram(void) {
 	printf("Memory:\n");
-	for (int i = RAM_START; i < RAM_END; i += 4) {
+	for (int i = 0; i < RAM_SIZE; i += 4) {
 		uint32_t value;
-		memcpy(&value, &m_ram[i-RAM_START], sizeof(value));
+		memcpy(&value, &m_ram[i], sizeof(value));
 		if (value) {
-			printf("  [0x%x] = 0x%x\n", i, value);
+			printf("  [0x%x] = 0x%x\n", i + RAM_START, value);
 		}
 	}
 }
