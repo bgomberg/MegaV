@@ -66,13 +66,7 @@ public:
   void microstep() {
     // Print info no the stage we're about to execute
     const int prev_stage_num = get_stage_num();
-    if (compliance_mode_) {
-      if (prev_stage_num == STAGE_DECODE) {
-        printf("Executing 0x%02x -> 0x%08x [", (*this)->pc_pc, (*this)->instr);
-        print_decoded_instr((*this)->instr);
-        printf("]\n");
-      }
-    } else {
+    if (!compliance_mode_) {
       printf("Executing %s\n", STAGE_STRS[prev_stage_num]);
       printf("  Inputs:\n");
       switch (prev_stage_num) {
@@ -164,7 +158,9 @@ public:
     do {
       microstep();
     } while ((*this)->stage_active != (1 << 0));
-    printf("\n");
+    if (!compliance_mode_) {
+      printf("\n");
+    }
   }
 
 private:
@@ -201,7 +197,7 @@ private:
 
 
 int main(int argc, char** argv) {
-  const bool compliance_mode = argc == 3 && !strcmp(argv[2], "-c");
+  const bool compliance_mode = argc == 3;
   if (argc != 2 && !compliance_mode) {
     fprintf(stderr, "Usage: %s <test_prog.bin> [-c]\n", argv[0]);
     return -1;
@@ -235,7 +231,7 @@ int main(int argc, char** argv) {
   // run until we enter an infinite loop
   uint32_t prev_pc = UINT32_MAX;
   bool same_pc_flag = false;
-  int watchdog_instr_left = 100;
+  int watchdog_instr_left = 1000;
   bool triggered_ext_int = compliance_mode;
   while (true) {
     if (watchdog_instr_left-- <= 0) {
@@ -268,6 +264,29 @@ int main(int argc, char** argv) {
     }
   }
   mem_dump_ram();
+
+  if (compliance_mode) {
+    // check the result
+    const uint32_t result = core->rf_module->registers[2];
+    if (result != 1) {
+      fprintf(stderr, "Test failed with result %u\n", result);
+      exit(1);
+    }
+    // Open the reference output file
+    FILE* ref_file = fopen(argv[2], "r");
+    unsigned int value;
+    uint32_t mem_addr = core->rf_module->registers[1];
+    while (fscanf(ref_file, "%x\n", &value) != EOF) {
+      const uint32_t mem_value = mem_read(mem_addr);
+      if (mem_value != value) {
+        fclose(ref_file);
+        fprintf(stderr, "Expected 0x%x, got 0x%x at addr 0x%x\n", value, mem_value, mem_addr);
+        exit(1);
+      }
+      mem_addr += sizeof(uint32_t);
+    }
+    fclose(ref_file);
+  }
 
   return 0;
 }

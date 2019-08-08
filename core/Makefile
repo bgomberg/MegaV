@@ -26,6 +26,9 @@ SIM_HEADER_FILES := \
 	sim/decode.h \
 	sim/mem.h
 SIM_TEST_PROG_SRC_FILE := sim/test_prog.S
+SIM_COMPLIANCE_SRC_DIR := sim/compliance/src
+SIM_COMPLIANCE_INC_DIR := sim/compliance/inc
+SIM_COMPLIANCE_REFERNCES_DIR := sim/compliance/references
 SBY_CONFIG_FILE := scripts/verify.sby
 YOSYS_SYNTH_SCRIPT_FILE = scripts/synth.ys
 YOSYS_GATES_SCRIPT_FILE = scripts/gates.ys
@@ -34,6 +37,7 @@ YOSYS_GATES_SCRIPT_FILE = scripts/gates.ys
 REPO_ROOT := $(shell git rev-parse --show-toplevel)
 OBJ_DIR := $(BUILD_DIR)/obj
 OUT_DIR := $(BUILD_DIR)/out
+RESULT_DIR := $(BUILD_DIR)/result
 GATES_PNG_OUT := $(OUT_DIR)/$(PROJECT_NAME).png
 GATES_JSON_OUT := $(OUT_DIR)/$(PROJECT_NAME).json
 SIM_EXE_OUT := $(OUT_DIR)/$(PROJECT_NAME).exe
@@ -62,10 +66,12 @@ RISCV_CC := riscv-none-embed-gcc
 RISCV_LD := riscv-none-embed-ld
 RISCV_OBJCOPY := riscv-none-embed-objcopy
 
-directories: $(OBJ_DIR) $(OUT_DIR)
+directories: $(OBJ_DIR) $(OUT_DIR) $(RESULT_DIR)
 $(OBJ_DIR):
 	@mkdir -p $@
 $(OUT_DIR):
+	@mkdir -p $@
+$(RESULT_DIR):
 	@mkdir -p $@
 
 gates_json: directories $(GATES_JSON_OUT)
@@ -112,6 +118,23 @@ $(OBJ_DIR)/test_prog.o: $(SIM_TEST_PROG_SRC_FILE)
 	@echo "Compiling $(notdir $@)"
 	@$(RISCV_CC) -march=rv32e -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles $^ -o $@
 
+COMPLIANCE_SRCS := $(wildcard $(SIM_COMPLIANCE_SRC_DIR)/*)
+COMPLIANCE_BINS := $(addprefix $(OBJ_DIR)/,$(notdir $(COMPLIANCE_SRCS:.S=.bin)))
+COMPLIANCE_RESULTS := $(addprefix $(RESULT_DIR)/,$(notdir $(COMPLIANCE_SRCS:.S=.txt)))
+compliance: directories $(SIM_EXE_OUT) $(COMPLIANCE_RESULTS)
+$(RESULT_DIR)/%.txt: $(OBJ_DIR)/%.bin $(SIM_EXE_OUT)
+	@echo "Running test: $(notdir $(<:.bin=.S))"
+	@$(SIM_EXE_OUT) $< $(addprefix $(SIM_COMPLIANCE_REFERNCES_DIR)/,$(notdir $(<:.bin=.reference_output))) > $@
+$(OBJ_DIR)/%.bin: $(OBJ_DIR)/%.elf
+	@echo "Copying $(notdir $@)"
+	@$(RISCV_OBJCOPY) -O binary $< $@
+$(OBJ_DIR)/%.elf: $(OBJ_DIR)/%.o sim/link.ld
+	@echo "Linking $(notdir $@)"
+	@$(RISCV_LD) -T sim/link.ld -nostartfiles $< -o $@
+$(OBJ_DIR)/%.o: $(SIM_COMPLIANCE_SRC_DIR)/%.S $(wildcard $(SIM_COMPLIANCE_INC_DIR)/*)
+	@echo "Compiling $(notdir $@)"
+	@$(RISCV_CC) -march=rv32e -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles -I$(SIM_COMPLIANCE_INC_DIR) $< -o $@
+
 sby:
 	@$(SBY) -d $(OBJ_DIR)/sby -f $(SBY_CONFIG_FILE) $(SBY_MODULE)
 
@@ -123,6 +146,6 @@ clean:
 	@echo "Removing build folder"
 	@rm -rf $(BUILD_DIR)
 
-.PRECIOUS: %.synth.ilang %.gates.ilang %.dot %.json
+.PRECIOUS: %.synth.ilang %.gates.ilang %.dot %.json $(OBJ_DIR)/%.o $(OBJ_DIR)/%.elf $(OBJ_DIR)/%.bin
 .PHONY: gates_png gates_json build_sim run_sim sby all clean directories
 .DEFAULT_GOAL := all
