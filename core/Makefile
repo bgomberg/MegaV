@@ -124,7 +124,7 @@ COMPLIANCE_RESULTS := $(addprefix $(RESULT_DIR)/,$(notdir $(COMPLIANCE_SRCS:.S=.
 compliance: directories $(SIM_EXE_OUT) $(COMPLIANCE_RESULTS)
 $(RESULT_DIR)/%.txt: $(OBJ_DIR)/%.bin $(SIM_EXE_OUT)
 	@echo "Running test: $(notdir $(<:.bin=.S))"
-	@$(SIM_EXE_OUT) $< $(addprefix $(SIM_COMPLIANCE_REFERNCES_DIR)/,$(notdir $(<:.bin=.reference_output))) > $@
+	@$(SIM_EXE_OUT) $< $(addprefix $(SIM_COMPLIANCE_REFERNCES_DIR)/,$(notdir $(<:.bin=.reference_output))) > $@ || { cat $@; rm $@; }
 $(OBJ_DIR)/%.bin: $(OBJ_DIR)/%.elf
 	@echo "Copying $(notdir $@)"
 	@$(RISCV_OBJCOPY) -O binary $< $@
