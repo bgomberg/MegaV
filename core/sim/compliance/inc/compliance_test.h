@@ -33,10 +33,21 @@
     beq x10, x11, exception_loop;                                     \
   other_exception:                                                    \
     /* some unhandlable exception occurred */                         \
+    csrr x12, mepc;                                                   \
     ori gp, gp, 1337;                                                 \
   exception_loop:                                                     \
     j .;                                                              \
-  1:                                                                  \
+  .section .text;                                                     \
+  main:
+
+#define RV_COMPLIANCE_CODE_BEGIN_CUSTOM_TRAP_HANDLER(HANDLER)         \
+  .section .prog_entry, "ax";                                         \
+  .global prog_entry;                                                 \
+  prog_entry:                                                         \
+    j main;                                                           \
+  .section .irq_handler;                                              \
+  trap_vector:                                                        \
+    j HANDLER;                                                        \
   .section .text;                                                     \
   main:
 

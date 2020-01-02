@@ -52,14 +52,14 @@ module core(
     wire [31:0] pc_pc /* verilator public */;
     reg [31:0] pc_next_pc /* verilator public */;
     reg [31:0] pc_offset_pc /* verilator public */;
-    wire [31:0] pc_in = (~decode_wb_pc_mux_position[1] & decode_wb_pc_mux_position[0]) ? ex_out : (
-        (decode_wb_pc_mux_position[1] & (~decode_wb_pc_mux_position[0] | ex_alu_out[0])) ? pc_offset_pc : pc_next_pc);
+    wire [31:1] pc_in = (~decode_wb_pc_mux_position[1] & decode_wb_pc_mux_position[0]) ? ex_out[31:1] : (
+        (decode_wb_pc_mux_position[1] & (~decode_wb_pc_mux_position[0] | ex_alu_out[0])) ? pc_offset_pc[31:1] : pc_next_pc[31:1]);
     wire pc_busy;
     program_counter pc_module(
         clk,
         reset_n,
         stage_active[`STAGE_UPDATE_PC],
-        pc_in,
+        {pc_in, 1'b0},
         pc_pc,
         pc_busy);
 

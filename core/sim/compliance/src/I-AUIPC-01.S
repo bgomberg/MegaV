@@ -165,7 +165,7 @@ test_C1:
   lw x9, 8(x10)
 
   # Test
-  la x4,  test_C1
+  la x4, test_C1
   la x15, test_C2
   la x10, test_C3
 

@@ -50,18 +50,21 @@
     lw x10, 0(_SP);
 
 #define RVTEST_IO_WRITE_GFR(_SP, _R)                                  \
-    sw gp, 12(_SP);                                                   \
-    li gp, 0x20000004;                                                \
-    sw _R, 0(gp);                                                     \
-    lw gp, 12(_SP);
+    sw x10, 8(_SP);                                                   \
+    li x10, 0x20000004;                                               \
+    sw _R, 0(x10);                                                    \
+    lw x10, 8(_SP);
 
 #define RVTEST_IO_CHECK()
 
 #define RVTEST_IO_ASSERT_GPR_EQ(_SP, _R, _I)                          \
     la _SP, begin_regstate;                                           \
-    sw x10, 8(_SP);                                                   \
+    beq _SP, _R, 20003f;                                              \
+    sw x11, 12(_SP);                                                  \
+    add x11, _R, x0;                                                  \
+    sw x10, 16(_SP);                                                  \
     li x10, _I;                                                       \
-    beq _R, x10, 20002f;                                              \
+    beq x11, x10, 20002f;                                             \
     RVTEST_IO_WRITE_STR(_SP, "Assertion violation: file ");           \
     RVTEST_IO_WRITE_STR(_SP, __FILE__);                               \
     RVTEST_IO_WRITE_STR(_SP, ", line ");                              \
@@ -69,13 +72,26 @@
     RVTEST_IO_WRITE_STR(_SP, ": ");                                   \
     RVTEST_IO_WRITE_STR(_SP, # _R);                                   \
     RVTEST_IO_WRITE_STR(_SP, "(");                                    \
-    RVTEST_IO_WRITE_GFR(_SP, _R);                                     \
+    RVTEST_IO_WRITE_GFR(_SP, x11);                                    \
     RVTEST_IO_WRITE_STR(_SP, ") != ");                                \
     RVTEST_IO_WRITE_STR(_SP, # _I);                                   \
     RVTEST_IO_WRITE_STR(_SP, "\n");                                   \
     li gp, 100;                                                       \
     j .;                                                              \
+  20003:                                                              \
+    RVTEST_IO_WRITE_STR(_SP, "Invalid register used: file ");         \
+    RVTEST_IO_WRITE_STR(_SP, __FILE__);                               \
+    RVTEST_IO_WRITE_STR(_SP, ", line ");                              \
+    RVTEST_IO_WRITE_STR(_SP, TOSTRING(__LINE__));                     \
+    RVTEST_IO_WRITE_STR(_SP, ": ");                                   \
+    RVTEST_IO_WRITE_STR(_SP, # _R);                                   \
+    RVTEST_IO_WRITE_STR(_SP, " (_SP=");                               \
+    RVTEST_IO_WRITE_STR(_SP, # _SP);                                  \
+    RVTEST_IO_WRITE_STR(_SP, ")\n");                                  \
+    li gp, 177;                                                       \
+    j .;                                                              \
   20002:                                                              \
-    lw x10, 8(_SP);
+    lw x10, 16(_SP);                                                  \
+    lw x11, 12(_SP);
 
 #endif // _COMPLIANCE_IO_H

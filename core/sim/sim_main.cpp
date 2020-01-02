@@ -255,6 +255,8 @@ int main(int argc, char** argv) {
     }
   }
 
+  printf("pc = 0x%x\n", core->pc_pc);
+
   // Dump the non-zero registers and memory
   printf("Registers:\n");
   for (uint8_t i = 1; i < 16; i++) {

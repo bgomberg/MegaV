@@ -29,6 +29,7 @@ typedef struct {
 } mem_op_t;
 
 static uint8_t flash_read_byte_func(uint32_t offset);
+static void flash_write_byte_func(uint32_t offset, uint8_t data);
 static uint8_t ram_read_byte_func(uint32_t offset);
 static void ram_write_byte_func(uint32_t offset, uint8_t data);
 static void periph_write_byte_func(uint32_t offset, uint8_t data);
@@ -42,7 +43,7 @@ static const mem_region_t REGIONS[] = {
     .start_addr = FLASH_START,
     .length = FLASH_SIZE,
     .read_byte_func = flash_read_byte_func,
-    .write_byte_func = nullptr,
+    .write_byte_func = flash_write_byte_func,
   },
   {
     .start_addr = RAM_START,
@@ -108,6 +109,10 @@ static void mem_write_byte(uint32_t addr, uint8_t data) {
 
 static uint8_t flash_read_byte_func(uint32_t offset) {
   return m_flash[offset];
+}
+
+static void flash_write_byte_func(uint32_t offset, uint8_t data) {
+  m_flash[offset] = data;
 }
 
 static uint8_t ram_read_byte_func(uint32_t offset) {

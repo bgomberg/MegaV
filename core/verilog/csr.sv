@@ -39,7 +39,7 @@ module csr #(
         (~addr_exception[6] & (addr_exception[1] | addr_exception[0])) |
         (addr_exception[6] & addr_exception[2] & (addr_exception[1] | addr_exception[0])) |
         (addr_exception[6] & ~addr_exception[2] & ~(addr_exception[1] ^ addr_exception[0]));
-    wire csr_is_read_only = addr_exception[6] & ~addr_exception[2];
+    wire csr_is_read_only = addr_exception[1];
     wire csr_access_error = csr_addr_is_invalid | (csr_is_read_only & op_is_write);
     wire op_is_valid_csr = (op_is_csr_rw | op_is_csr_rs | op_is_csr_rc) & ~csr_access_error;
     wire op_is_csr_mcause = op_is_valid_csr & addr_exception[6] & addr_exception[1];
@@ -75,6 +75,7 @@ module csr #(
     wire [31:0] read_value_value = op_is_exception ? IRQ_HANDLER_ADDR : (
         (op_is_csr_mcause) ? {trap_is_interrupt, 27'b0, exception_code} : (
         (op_is_csr_mip_mstatus_mie) ? csr_mip_mstatus_mie_value : exception_pc));
+    wire [31:0] exception_pc_write_value = {({30{op_is_csr_rc}} & ~write_value[31:2] & exception_pc[31:2]) | ({30{~op_is_csr_rc}} & write_value[31:2]) | ({30{op_is_csr_rs}} & exception_pc[31:2]), 2'b0};
     wire prior_interrupts_enabled_write_value = ((~op_is_csr_rc & write_value[7]) | (~op_is_csr_rw & ~write_value[7] & prior_interrupts_enabled));
     wire interrupts_enabled_write_value = (~op_is_csr_rc & write_value[3]) | (~op_is_csr_rw & ~write_value[3] & interrupts_enabled);
     wire external_interrupt_enabled_value = (~op_is_csr_rc & write_value[11]) | (~op_is_csr_rw & ~write_value[11] & external_interrupt_enabled);
@@ -99,7 +100,7 @@ module csr #(
         ext_int_received <= reset_n & ext_int;
         external_interrupt_pending <= reset_n & ~handling_pending_external_interrupt & ((ext_int & ~ext_int_received) | external_interrupt_pending);
         software_interrupt_pending <= reset_n & ~handling_pending_software_interrupt & ((should_perform_op & op_is_csr_mip) ? software_interrupt_pending_value : software_interrupt_pending);
-        exception_pc <= (reset_n & should_perform_op & op_is_exception) ? write_value : ({32{reset_n}} & exception_pc);
+        exception_pc <= (reset_n & should_perform_op & (op_is_exception | op_is_write)) ? exception_pc_write_value : ({32{reset_n}} & exception_pc);
     end
 
 `ifdef FORMAL
@@ -149,7 +150,8 @@ module csr #(
                         // exception
                         assert(exception_code == $past(addr_exception[3:0]));
                         assert(trap_is_interrupt == $past(addr_exception[4]));
-                        assert(exception_pc == $past(write_value));
+                        assert(exception_pc[31:2] == $past(write_value[31:2]));
+                        assert(exception_pc[1:0] == 2'b0);
                         assert(read_value[31:2] == IRQ_HANDLER_ADDR[31:2]);
                         assert(!interrupts_enabled);
                         assert(prior_interrupts_enabled == $past(interrupts_enabled));
@@ -195,18 +197,14 @@ module csr #(
                                 assert(!fault);
                             end
                             12'h341: begin // mepc
-                                if (!fault) begin
-                                    assert(read_value == $past(exception_pc));
-                                    assert(exception_pc == $past(exception_pc));
-                                end
+                                assert(!fault);
+                                assert(read_value == $past(exception_pc));
                                 if ($past(op) == 3'b101)
-                                    assert(fault);
+                                    assert(exception_pc[31:2] == $past(write_value[31:2]));
                                 else if ($past(op) == 3'b110)
-                                    assert(fault == ($past(write_value) != 0));
+                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) | $past(write_value[31:2])));
                                 else if ($past(op) == 3'b111)
-                                    assert(fault == ($past(write_value) != 0));
-                                else
-                                    assert(0);
+                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) & ~$past(write_value[31:2])));
                             end
                             12'h342: begin // mcause
                                 if (!fault) begin
