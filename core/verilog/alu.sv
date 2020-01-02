@@ -34,6 +34,7 @@ module alu(
     wire op_shift_is_right = op[2];
     wire op_shift_is_right_arithmetic = op_shift_is_right & op[3];
     wire op_is_branch_eq_ne = op[4] & ~op[2];
+    wire op_is_branch_gt = op[4] & op[0];
     wire op_branch_slt_is_unsigned = (~op[4] & op[0]) | (op[2] & op[1]);
     wire is_invalid_op = (op[3] & op[1]) | (op[4] & op[3]) | (op[3] & ~op[2] & op[0]) | (op[3] & op[2] & ~op[0]) | (op[4] & ~op[2] & op[1]);
 
@@ -66,7 +67,7 @@ module alu(
     wire eq_result = (xor_result == 32'b0);
     wire sign_cmp_result = (in_a[31] ^ op_branch_slt_is_unsigned) & ~(in_b[31] ^ op_branch_slt_is_unsigned);
     wire lt_ltu_result = sign_cmp_result | (~(in_a[31] ^ in_b[31]) & adder_sum[31] & ~eq_result);
-    wire branch_slt_sltu_result = (op_is_branch_eq_ne ? eq_result : lt_ltu_result) ^ op[0];
+    wire branch_slt_sltu_result = (op_is_branch_eq_ne ? eq_result : lt_ltu_result) ^ op_is_branch_gt;
     reg started;
     always @(posedge clk) begin
         busy <= reset_n & ~started & available;
