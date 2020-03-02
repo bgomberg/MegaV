@@ -140,7 +140,7 @@ sby:
 
 all: build_sim gates_json
 
-test: sby run_sim
+test: sby run_sim compliance
 
 clean:
 	@echo "Removing build folder"
