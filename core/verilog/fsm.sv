@@ -14,7 +14,6 @@
 module fsm(
     input clk, // Clock signal
     input reset_n, // Reset signal (active low)
-    input [`NUM_STAGES-1:0] stage_done, // Stage done
     input illegal_instr_fault, // Illegal instruction fault
     input mem_addr_fault, // Memory address fault
     input mem_access_fault, // Memory access fault
@@ -33,9 +32,9 @@ module fsm(
 
     /* Logic */
     reg fault;
-    reg in_progress; // need to stall at least one cycle per stage to allow the stage_done bits to be updated
+    reg in_progress;
     wire [`NUM_STAGES-1:0] next_stage = {stage_active[`NUM_STAGES-2:0], stage_active[`NUM_STAGES-1]};
-    wire current_stage_done = ((stage_active & stage_done) != 0) & in_progress;
+    wire current_stage_done = in_progress;
     wire mem_fault = mem_addr_fault | mem_access_fault;
     wire fetch_stage_mem_fault = mem_fault & stage_active[`STAGE_FETCH];
     wire mem_stage_mem_fault = mem_fault & stage_active[`STAGE_MEMORY];
@@ -50,10 +49,24 @@ module fsm(
     wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
     always @(posedge clk) begin
         fault_num <= active_fault ? active_fault_num : fault_num;
-        in_progress <= reset_n & ~current_stage_done;
-        fault <= fault_value;
-        stage_active <= (reset_n & ~active_fault) ? (current_stage_done ? next_stage : stage_active) : 1 << 0;
-        control_op <= (~reset_n | active_fault | (current_stage_done & next_stage[`STAGE_CONTROL])) ? control_op_value : control_op;
+            fault <= fault_value;
+        if (~reset_n) begin
+            in_progress <= 0;
+            stage_active <= 1 << `STAGE_CONTROL;
+            control_op <= control_op_value;
+        end else begin
+            in_progress <= ~current_stage_done;
+            if (current_stage_done) begin
+                stage_active <= next_stage;
+                if (next_stage[`STAGE_CONTROL]) begin
+                    control_op <= control_op_value;
+                end
+            end
+            if (active_fault) begin
+                stage_active <= 1 << `STAGE_CONTROL;
+                control_op <= control_op_value;
+            end
+        end
     end
 
 `ifdef FORMAL
@@ -71,29 +84,20 @@ module fsm(
             assume($past(stage_active & (stage_active - 1)) == 0);
             if ($past(~reset_n)) begin
                 assert(stage_active == 1 << 0);
-                assert(!fault);
             end else if ($past(stage_active) != $past(stage_active, 2) || $past(~reset_n, 2)) begin
                 // need to stay in each stage for at least 2 clock cycles
                 assert(stage_active == $past(stage_active));
-                assert(fault == $past(fault));
-            end else if (!($past(stage_done) & $past(stage_active))) begin
-                // the stage wasn't done, so should still be in it
-                assert(stage_active == $past(stage_active));
-                assert(fault == $past(fault));
             end else begin
                 assert(stage_active == (1 << 0) || stage_active != $past(stage_active));
                 if ($past(illegal_instr_fault) && !$past(stage_active[`STAGE_CONTROL])) begin
                     // Illegal instruction
-                    assert(fault);
                     assert(stage_active == (1 << 0));
                     assert(fault_num == 3'b010);
                 end else if ($past(mem_addr_fault) && $past(stage_active[`STAGE_FETCH])) begin
                     // Instruction address misaligned
-                    assert(fault);
                     assert(stage_active == (1 << 0));
                     assert(fault_num == 3'b000);
                 end else if ($past(mem_addr_fault) && $past(stage_active[`STAGE_MEMORY])) begin
-                    assert(fault);
                     assert(stage_active == (1 << 0));
                     if ($past(mem_fault_is_store)) begin
                         // Store address misaligned
@@ -104,10 +108,8 @@ module fsm(
                     end
                 end else if ($past(mem_access_fault) && $past(stage_active[`STAGE_FETCH])) begin
                     // Instruction access fault
-                    assert(fault);
                     assert(fault_num == 3'b001);
                 end else if ($past(mem_access_fault) && $past(stage_active[`STAGE_MEMORY])) begin
-                    assert(fault);
                     assert(stage_active == (1 << 0));
                     if ($past(mem_fault_is_store)) begin
                         // Store access fault
@@ -118,7 +120,6 @@ module fsm(
                     end
                 end else begin
                     // Stage was completed without a fault
-                    assert(!fault);
                     assert(stage_active == $past({stage_active[`NUM_STAGES-2:0], stage_active[`NUM_STAGES-1]}));
                 end
             end

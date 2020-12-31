@@ -5,6 +5,7 @@
 #include <Vmodule_core.h>
 #include <Vmodule_memory.h>
 #include <Vmodule_register_file.h>
+#include <Vmodule_fsm.h>
 
 #include <verilated.h>
 
@@ -64,7 +65,7 @@ public:
   }
 
   void microstep() {
-    // Print info no the stage we're about to execute
+    // Print info on the stage we're about to execute
     const int prev_stage_num = get_stage_num();
     if (!compliance_mode_) {
       printf("Executing %s\n", STAGE_STRS[prev_stage_num]);
@@ -141,6 +142,9 @@ public:
         break;
       case STAGE_MEMORY:
         printf("    out: 0x%x\n", (*this)->mem_out);
+        printf("    mem_op_fault: 0x%x\n", (*this)->mem_op_fault);
+        printf("    mem_addr_fault: 0x%x\n", (*this)->mem_addr_fault);
+        printf("    mem_access_fault: 0x%x\n", (*this)->mem_access_fault);
         break;
       case STAGE_WRITE_BACK:
         break;
@@ -223,8 +227,8 @@ int main(int argc, char** argv) {
   fclose(f);
 
   // Create our core object, reset it, and copy in the program
-  Core core(compliance_mode);
-  mem_init(core.operator->(), program, file_size);
+  Core core(compliance_mode && false);
+  mem_init(program, file_size);
   core.reset();
   printf("\n");
 

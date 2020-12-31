@@ -20,13 +20,11 @@ module alu(
     input [31:0] in_a, // Input data (bus A)
     input [31:0] in_b, // Input data (bus B)
     output [31:0] out, // Output data
-    output busy, // Operation busy
     output fault // Invalid operation
 );
 
     /* Internal variables */
     reg [31:0] out;
-    reg busy;
     reg fault;
 
     /* Op decoding */
@@ -68,24 +66,28 @@ module alu(
     wire sign_cmp_result = (in_a[31] ^ op_branch_slt_is_unsigned) & ~(in_b[31] ^ op_branch_slt_is_unsigned);
     wire lt_ltu_result = sign_cmp_result | (~(in_a[31] ^ in_b[31]) & adder_sum[31] & ~eq_result);
     wire branch_slt_sltu_result = (op_is_branch_eq_ne ? eq_result : lt_ltu_result) ^ op_is_branch_gt;
-    reg started;
     always @(posedge clk) begin
-        busy <= reset_n & ~started & available;
-        started <= reset_n & available;
-        fault <= reset_n & available & is_invalid_op;
-        if (reset_n & busy & started) begin
-            if (~op[4] & ~op[2] & ~op[1] & ~op[0]) // ADD,SUB
-                out <= adder_sum;
-            else if (~op[4] & op[2] & ~op[1] & ~op[0]) // XOR
-                out <= xor_result;
-            else if (~op[4] & op[2] & op[1] & ~op[0]) // OR
-                out <= or_result;
-            else if (~op[4] & op[2] & op[1] & op[0]) // AND
-                out <= and_result;
-            else if (~op[4] & ~op[1] & op[0]) // SLL,SRL,SRA
-                out <= shift_result;
-            else // SLT,SLTU,BEQ,BNE,BLT,BGE,BTLU,BGEU
-                out <= {31'b0, branch_slt_sltu_result};
+        if (~reset_n) begin
+            // Reset
+            fault <= 0;
+        end else begin
+            if (available) begin
+                fault <= is_invalid_op;
+                if (~op[4] & ~op[2] & ~op[1] & ~op[0]) // ADD,SUB
+                    out <= adder_sum;
+                else if (~op[4] & op[2] & ~op[1] & ~op[0]) // XOR
+                    out <= xor_result;
+                else if (~op[4] & op[2] & op[1] & ~op[0]) // OR
+                    out <= or_result;
+                else if (~op[4] & op[2] & op[1] & op[0]) // AND
+                    out <= and_result;
+                else if (~op[4] & ~op[1] & op[0]) // SLL,SRL,SRA
+                    out <= shift_result;
+                else // SLT,SLTU,BEQ,BNE,BLT,BGE,BTLU,BGEU
+                    out <= {31'b0, branch_slt_sltu_result};
+            end else begin
+                fault <= 0;
+            end
         end
     end
 
@@ -100,19 +102,10 @@ module alu(
     /* Validate logic */
     always @(posedge clk) begin
         if (f_past_valid) begin
-            assume(started | ~busy);
-            if (available) begin
-                assume($stable(op));
-                assume($stable(in_a));
-                assume($stable(in_b));
-            end
-            if (busy) begin
-                assume(available);
-            end
             if ($past(~reset_n)) begin
-                assert(!busy);
                 assert(!fault);
-            end else if ($past(busy) && !busy) begin
+            end else begin
+                assume($past(available));
                 case ($past(op))
                     5'b0000: begin // ADD
                         assert(!fault);

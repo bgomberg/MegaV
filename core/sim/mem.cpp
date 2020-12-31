@@ -1,6 +1,7 @@
 #include "mem.h"
 
-#include <Vmodule_memory.h>
+#include "verilated.h"
+#include "Vmodule__Dpi.h"
 
 #include <stdio.h>
 
@@ -13,7 +14,7 @@
 
 #define ARRAY_LENGTH(ARR) ((sizeof(ARR)) / sizeof(*(ARR)))
 #define BIT(VAL, POS) \
-	(((VAL) >> (POS)) & 1)
+  (((VAL) >> (POS)) & 1)
 
 typedef struct {
   uint32_t start_addr;
@@ -22,20 +23,12 @@ typedef struct {
   void(*write_byte_func)(uint32_t offset, uint8_t data);
 } mem_region_t;
 
-typedef struct {
-	bool busy;
-	int debug_cycles;
-	uint32_t read_result;
-} mem_op_t;
-
 static uint8_t flash_read_byte_func(uint32_t offset);
 static void flash_write_byte_func(uint32_t offset, uint8_t data);
 static uint8_t ram_read_byte_func(uint32_t offset);
 static void ram_write_byte_func(uint32_t offset, uint8_t data);
 static void periph_write_byte_func(uint32_t offset, uint8_t data);
 
-static const Vmodule_core* m_core;
-static mem_op_t m_mem_op;
 static uint8_t m_flash[RAM_START];
 static uint8_t m_ram[RAM_SIZE];
 static const mem_region_t REGIONS[] = {
@@ -59,24 +52,23 @@ static const mem_region_t REGIONS[] = {
   },
 };
 
-void mem_init(const Vmodule_core* core, const void *data, size_t len) {
-	m_core = core;
-	if (len > sizeof(m_flash)) {
-		fprintf(stderr, "Invalid flash length (%zu)\n", len);
-		exit(1);
-	}
-	memcpy(m_flash, data, len);
+void mem_init(const void *data, size_t len) {
+  if (len > sizeof(m_flash)) {
+    fprintf(stderr, "Invalid flash length (%zu)\n", len);
+    exit(1);
+  }
+  memcpy(m_flash, data, len);
 }
 
 void mem_dump_ram(void) {
-	printf("Memory:\n");
-	for (int i = 0; i < RAM_SIZE; i += 4) {
-		uint32_t value;
-		memcpy(&value, &m_ram[i], sizeof(value));
-		if (value) {
-			printf("  [0x%x] = 0x%x\n", i + RAM_START, value);
-		}
-	}
+  printf("Memory:\n");
+  for (int i = 0; i < RAM_SIZE; i += 4) {
+    uint32_t value;
+    memcpy(&value, &m_ram[i], sizeof(value));
+    if (value) {
+      printf("  [0x%x] = 0x%x\n", i + RAM_START, value);
+    }
+  }
 }
 
 static const mem_region_t* get_region(uint32_t addr) {
@@ -92,8 +84,8 @@ static const mem_region_t* get_region(uint32_t addr) {
 static uint8_t mem_read_byte(uint32_t addr) {
   const mem_region_t* region = get_region(addr);
   if (!region || !region->read_byte_func) {
-  	printf("!!! Invalid read addr\n");
-  	exit(1);
+    printf("!!! Invalid read addr\n");
+    exit(1);
   }
   return region->read_byte_func(addr - region->start_addr);
 }
@@ -101,8 +93,8 @@ static uint8_t mem_read_byte(uint32_t addr) {
 static void mem_write_byte(uint32_t addr, uint8_t data) {
   const mem_region_t* region = get_region(addr);
   if (!region || !region->write_byte_func) {
-  	printf("!!! Invalid write addr\n");
-  	exit(1);
+    printf("!!! Invalid write addr\n");
+    exit(1);
   }
   region->write_byte_func(addr - region->start_addr, data);
 }
@@ -140,70 +132,56 @@ static void periph_write_byte_func(uint32_t offset, uint8_t data) {
   }
 }
 
-svBit mem_op_setup(void) {
-	if (!m_core->mem_module->available || m_core->mem_module->started) {
-		return 0;
-	}
-  const bool is_write = m_core->mem_module->is_write;
-	const uint32_t addr = m_core->mem_module->addr;
-	const uint8_t op = m_core->mem_module->op;
-	if ((BIT(op, 1) & (BIT(addr, 1) | BIT(addr, 0))) | (BIT(op, 0) & BIT(addr, 0))) {
-		// Address misaligned
-		return 1;
-	}
+svBit mem_get_fault(int addr_val, svBit op_h, svBit op_l, svBit is_write) {
+  const uint32_t addr = (uint32_t)addr_val;
+  if ((op_h & (BIT(addr, 1) | BIT(addr, 0))) | (op_l & BIT(addr, 0))) {
+    // Address misaligned
+    return 1;
+  }
   const mem_region_t* region = get_region(addr);
-	if (!region || (is_write && !region->write_byte_func) || (!is_write && !region->read_byte_func)) {
-		// Access fault
-		return 1;
-	}
-	m_mem_op = (mem_op_t) {
-		.busy = true,
-		.debug_cycles = 0,
-		.read_result = UINT32_MAX,
-	};
-	return 0;
+  if (!region || (is_write && !region->write_byte_func) || (!is_write && !region->read_byte_func)) {
+    // Access fault
+    return 1;
+  }
+  return 0;
 }
 
-svBit mem_op_is_busy(void) {
-	if (m_mem_op.busy && ++m_mem_op.debug_cycles == 5) {
-		const uint32_t addr = m_core->mem_module->addr;
-		const uint8_t op = m_core->mem_module->op;
-		if (m_core->mem_module->is_write) {
-			const uint32_t write_data = m_core->mem_module->in;
-			mem_write_byte(addr, write_data & 0xff);
-			if (BIT(op, 0) || BIT(op, 1)) {
-				mem_write_byte(addr + 1, (write_data >> 8) & 0xff);
-			}
-			if (BIT(op, 1)) {
-				mem_write_byte(addr + 2, (write_data >> 16) & 0xff);
-				mem_write_byte(addr + 3, (write_data >> 24) & 0xff);
-			}
-		} else {
-			m_mem_op.read_result = mem_read_byte(addr);
-			if (BIT(op, 0) || BIT(op, 1)) {
-				m_mem_op.read_result |= (mem_read_byte(addr + 1) << 8);
-			}
-			if (BIT(op, 1)) {
-				m_mem_op.read_result |= (mem_read_byte(addr + 2) << 16);
-				m_mem_op.read_result |= (mem_read_byte(addr + 3) << 24);
-			}
-			if (!BIT(op, 1) && !BIT(op, 0)) {
-				if (!m_core->mem_module->is_unsigned && (m_mem_op.read_result & 0x80)) {
-					m_mem_op.read_result |= 0xFFFFFF00;
-				}
-			} else if (!BIT(op, 1) && BIT(op, 0)) {
-				if (!m_core->mem_module->is_unsigned && (m_mem_op.read_result & 0x8000)) {
-					m_mem_op.read_result |= 0xFFFF0000;
-				}
-			}
-		}
-		m_mem_op.busy = false;
-	}
-	return m_mem_op.busy;
-}
-
-int mem_read_get_result(void) {
-	return m_mem_op.read_result;
+int mem_get_read_result(int addr_val, int write_val, svBit op_h, svBit op_l, svBit is_write, svBit is_unsigned) {
+  static uint32_t read_result;
+  if (mem_get_fault(addr_val, op_h, op_l, is_write)) {
+    return read_result;
+  }
+  const uint32_t addr = (uint32_t)addr_val;
+  if (is_write) {
+    const uint32_t write_data = (uint32_t)write_val;
+    mem_write_byte(addr, write_data & 0xff);
+    if (op_l || op_h) {
+      mem_write_byte(addr + 1, (write_data >> 8) & 0xff);
+    }
+    if (op_h) {
+      mem_write_byte(addr + 2, (write_data >> 16) & 0xff);
+      mem_write_byte(addr + 3, (write_data >> 24) & 0xff);
+    }
+  } else {
+    read_result = mem_read_byte(addr);
+    if (op_l || op_h) {
+      read_result |= (mem_read_byte(addr + 1) << 8);
+    }
+    if (op_h) {
+      read_result |= (mem_read_byte(addr + 2) << 16);
+      read_result |= (mem_read_byte(addr + 3) << 24);
+    }
+    if (!op_h && !op_l) {
+      if (!is_unsigned && (read_result & 0x80)) {
+        read_result |= 0xFFFFFF00;
+      }
+    } else if (!op_h && op_l) {
+      if (!is_unsigned && (read_result & 0x8000)) {
+        read_result |= 0xFFFF0000;
+      }
+    }
+  }
+  return read_result;
 }
 
 uint32_t mem_read(uint32_t addr) {

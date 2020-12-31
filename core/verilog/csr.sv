@@ -4,49 +4,33 @@
 module csr #(
     parameter [31:0] IRQ_HANDLER_ADDR = 32'h00000010
 ) (
-    input clk, // Clock signal
-    input reset_n, // Reset signal (active low)
-    input available, // Operation available
-    input ext_int, // External interrupt (ignores the available input)
-    input [2:0] op, // (3'b000=Exception, 3'b001=MRET, 3'b101=CSRRW, 3'b110=CSRRS, 3'b111=CSRRC)
-    input [11:0] addr_exception, // Address / exception value
-    input [31:0] write_value, // Write value
-    output [31:0] read_value, // Read value
-    output ext_int_pending, // External interrupt pending
-    output sw_int_pending, // Software interrupt pending
-    output busy, // Operation busy
-    output fault // Fault condition
+    input clk_i, // Clock signal
+    input reset_n_i, // Reset signal (active low)
+    input available_i, // Operation available
+    input is_write_stage_i, // Perform the write portion of the operation
+    input ext_int_i, // External interrupt
+    input [2:0] op_i, // (3'b000=Exception, 3'b001=MRET, 3'b011=Nop, 3'b101=CSRRW, 3'b110=CSRRS, 3'b111=CSRRC)
+    input [11:0] addr_exception_i, // Address / exception value
+    input [31:0] write_value_i, // Write value
+    output [31:0] read_value_o, // Read value
+    output ext_int_pending_o, // External interrupt pending
+    output sw_int_pending_o, // Software interrupt pending
+    output fault_o // Fault condition
 );
 
     /* Outputs */
-    reg [31:0] read_value;
-    reg ext_int_pending;
-    reg sw_int_pending;
-    reg busy;
-    reg fault;
+    reg [31:0] read_value_o;
+    reg ext_int_pending_o;
+    reg sw_int_pending_o;
+    reg fault_o;
 
     /* Op decode */
-    wire op_is_csr = op[2];
-    wire op_is_exception = ~op_is_csr & ~op[1] & ~op[0];
-    wire op_is_mret = ~op_is_csr & ~op[1] & op[0];
-    wire op_is_csr_rw = op_is_csr & ~op[1] & op[0];
-    wire op_is_csr_rs = op_is_csr & op[1] & ~op[0];
-    wire op_is_csr_rc = op_is_csr & op[1] & op[0];
-    wire op_is_invalid = (~op_is_csr & op[1]) | (op_is_csr & ~op[1] & ~op[0]);
-    wire write_value_non_zero = write_value != 32'b0;
-    wire op_is_write = op_is_csr_rw | (op_is_csr_rs & write_value_non_zero) | (op_is_csr_rc & write_value_non_zero);
-    wire csr_addr_is_invalid = (addr_exception[11:7] != 5'b00110) | (addr_exception[5:3] != 3'b000) |
-        (~addr_exception[6] & (addr_exception[1] | addr_exception[0])) |
-        (addr_exception[6] & addr_exception[2] & (addr_exception[1] | addr_exception[0])) |
-        (addr_exception[6] & ~addr_exception[2] & ~(addr_exception[1] ^ addr_exception[0]));
-    wire csr_is_read_only = addr_exception[1];
-    wire csr_access_error = csr_addr_is_invalid | (csr_is_read_only & op_is_write);
-    wire op_is_valid_csr = (op_is_csr_rw | op_is_csr_rs | op_is_csr_rc) & ~csr_access_error;
-    wire op_is_csr_mcause = op_is_valid_csr & addr_exception[6] & addr_exception[1];
-    wire op_is_csr_mip_mstatus_mie = op_is_valid_csr & (~addr_exception[6] | addr_exception[2]);
-    wire op_is_csr_mip = op_is_csr_mip_mstatus_mie & addr_exception[6];
-    wire op_is_csr_mstatus = op_is_csr_mip_mstatus_mie & ~addr_exception[6] & ~addr_exception[2];
-    wire op_is_csr_mie = op_is_csr_mip_mstatus_mie & ~addr_exception[6] & addr_exception[2];
+    wire op_is_csr = op_i[2] & (op_i[1] | op_i[0]);
+    wire op_is_exception = ~op_i[2] & ~op_i[1] & ~op_i[0];
+    wire op_is_mret = ~op_i[2] & ~op_i[1] & op_i[0];
+    wire op_is_csr_rw = op_is_csr & ~op_i[1] & op_i[0];
+    wire op_is_csr_rc = op_is_csr & op_i[1] & op_i[0];
+    wire op_is_nop = ~op_i[2] & op_i[1] & op_i[0];
 
     /* State */
     reg interrupts_enabled;
@@ -60,184 +44,289 @@ module csr #(
     reg trap_is_interrupt;
 
     /* Logic */
-    reg ext_int_received;
-    reg started;
-    wire should_perform_op = busy & started;
-    wire [31:0] csr_mip_mstatus_mie_value = {
-        20'b0,
-        addr_exception[6] ? external_interrupt_pending : (addr_exception[2] & external_interrupt_enabled),
-        3'b0,
-        ~addr_exception[6] & ~addr_exception[2] & prior_interrupts_enabled,
-        3'b0,
-        addr_exception[6] ? software_interrupt_pending : (addr_exception[2] ? software_interrupt_enabled : interrupts_enabled),
-        3'b0
-    };
-    wire [31:0] read_value_value = op_is_exception ? IRQ_HANDLER_ADDR : (
-        (op_is_csr_mcause) ? {trap_is_interrupt, 27'b0, exception_code} : (
-        (op_is_csr_mip_mstatus_mie) ? csr_mip_mstatus_mie_value : exception_pc));
-    wire [31:0] exception_pc_write_value = {({30{op_is_csr_rc}} & ~write_value[31:2] & exception_pc[31:2]) | ({30{~op_is_csr_rc}} & write_value[31:2]) | ({30{op_is_csr_rs}} & exception_pc[31:2]), 2'b0};
-    wire prior_interrupts_enabled_write_value = ((~op_is_csr_rc & write_value[7]) | (~op_is_csr_rw & ~write_value[7] & prior_interrupts_enabled));
-    wire interrupts_enabled_write_value = (~op_is_csr_rc & write_value[3]) | (~op_is_csr_rw & ~write_value[3] & interrupts_enabled);
-    wire external_interrupt_enabled_value = (~op_is_csr_rc & write_value[11]) | (~op_is_csr_rw & ~write_value[11] & external_interrupt_enabled);
-    wire software_interrupt_enabled_value = (~op_is_csr_rc & write_value[3]) | (~op_is_csr_rw & ~write_value[3] & software_interrupt_enabled);
-    wire software_interrupt_pending_value = (~op_is_csr_rc & write_value[3]) | (~op_is_csr_rw & ~write_value[3] & software_interrupt_pending);
-    wire handling_pending_external_interrupt = reset_n & should_perform_op & op_is_exception & external_interrupt_pending & (addr_exception[4:0] == 5'b11011);
-    wire handling_pending_software_interrupt = reset_n & should_perform_op & op_is_exception & software_interrupt_pending & (addr_exception[4:0] == 5'b10011);
-    always @(posedge clk) begin
-        ext_int_pending <= reset_n & external_interrupt_pending & external_interrupt_enabled & interrupts_enabled;
-        sw_int_pending <= reset_n & software_interrupt_pending & software_interrupt_enabled & interrupts_enabled;
-        fault <= reset_n & available & (op_is_invalid | (op_is_csr & csr_access_error));
-        busy <= reset_n & ~started & available;
-        started <= reset_n & available;
-        read_value <= should_perform_op ? read_value_value : read_value;
-        prior_interrupts_enabled <= reset_n & ((should_perform_op & op_is_exception) ? interrupts_enabled : (
-            (should_perform_op & op_is_csr_mstatus) ? prior_interrupts_enabled_write_value : prior_interrupts_enabled));
-        exception_code <= (should_perform_op & op_is_exception) ? addr_exception[3:0] : ({4{reset_n}} & exception_code);
-        interrupts_enabled <= reset_n & (should_perform_op ? (~op_is_exception & (op_is_mret ? prior_interrupts_enabled : (op_is_csr_mstatus ? interrupts_enabled_write_value : interrupts_enabled))) : interrupts_enabled);
-        external_interrupt_enabled <= reset_n & ((should_perform_op & op_is_csr_mie) ? external_interrupt_enabled_value : external_interrupt_enabled);
-        software_interrupt_enabled <= reset_n & ((should_perform_op & op_is_csr_mie) ? software_interrupt_enabled_value : software_interrupt_enabled);
-        trap_is_interrupt <= reset_n & ((should_perform_op & op_is_exception) ? addr_exception[4] : trap_is_interrupt);
-        ext_int_received <= reset_n & ext_int;
-        external_interrupt_pending <= reset_n & ~handling_pending_external_interrupt & ((ext_int & ~ext_int_received) | external_interrupt_pending);
-        software_interrupt_pending <= reset_n & ~handling_pending_software_interrupt & ((should_perform_op & op_is_csr_mip) ? software_interrupt_pending_value : software_interrupt_pending);
-        exception_pc <= (reset_n & should_perform_op & (op_is_exception | op_is_write)) ? exception_pc_write_value : ({32{reset_n}} & exception_pc);
+    wire [31:0] write_value_or_mask = {32{~op_is_csr_rc}} & write_value_i;
+    wire [31:0] write_value_and_mask = {32{~op_is_csr_rw}} & ~write_value_i;
+    reg temp_interrupts_enabled;
+    always @(posedge clk_i) begin
+        if (~reset_n_i) begin
+            ext_int_pending_o <= 0;
+            sw_int_pending_o <= 0;
+            fault_o <= 0;
+            interrupts_enabled <= 0;
+            prior_interrupts_enabled <= 0;
+            external_interrupt_enabled <= 0;
+            external_interrupt_pending <= 0;
+            software_interrupt_enabled <= 0;
+            software_interrupt_pending <= 0;
+            exception_pc <= 32'b0;
+            exception_code <= 4'b0;
+            trap_is_interrupt <= 0;
+        end else begin
+            ext_int_pending_o <= external_interrupt_pending & external_interrupt_enabled & interrupts_enabled;
+            sw_int_pending_o <= software_interrupt_pending & software_interrupt_enabled & interrupts_enabled;
+            fault_o <= 0;
+            if (available_i) begin
+                if (~is_write_stage_i) begin
+                    // Read stage
+                    if (op_is_exception) begin
+                        // exception
+                        read_value_o <= IRQ_HANDLER_ADDR;
+                        temp_interrupts_enabled <= interrupts_enabled;
+                    end else if (op_is_mret) begin
+                        read_value_o <= exception_pc;
+                        temp_interrupts_enabled <= prior_interrupts_enabled;
+                    end else if (op_is_csr) begin
+                        // CSR*
+                        if (addr_exception_i == 12'h300) begin
+                            // mstatus
+                            read_value_o <= {24'b0, prior_interrupts_enabled, 3'b0, interrupts_enabled, 3'b0};
+                        end else if (addr_exception_i == 12'h304) begin
+                            // mie
+                            read_value_o <= {20'b0, external_interrupt_enabled, 7'b0, software_interrupt_enabled, 3'b0};
+                        end else if (addr_exception_i == 12'h341) begin
+                            // mepc
+                            read_value_o <= exception_pc;
+                        end else if (addr_exception_i == 12'h342) begin
+                            // mcause
+                            read_value_o <= {trap_is_interrupt, 27'b0, exception_code};
+                        end else if (addr_exception_i == 12'h344) begin
+                            // mip
+                            read_value_o <= {20'b0, external_interrupt_pending, 7'b0, software_interrupt_pending, 3'b0};
+                        end else begin
+                            // invalid register
+                            fault_o <= 1;
+                        end
+                    end else if (op_is_nop) begin
+                        // do nothing
+                    end else begin
+                        // invalid op
+                        fault_o <= 1;
+                    end
+                end else begin
+                    // Write stage
+                    if (op_is_exception) begin
+                        // exception
+                        exception_code <= addr_exception_i[3:0];
+                        prior_interrupts_enabled <= temp_interrupts_enabled;
+                        interrupts_enabled <= 0;
+                        trap_is_interrupt <= addr_exception_i[4];
+                        exception_pc <= {write_value_i[31:2], 2'b0};
+                        if (software_interrupt_pending & addr_exception_i[4:0] == 5'b10011) begin
+                            // handling the pending software interrupt
+                            software_interrupt_pending <= 0;
+                        end else if (external_interrupt_pending & addr_exception_i[4:0] == 5'b11011) begin
+                            // handling the pending external interrupt
+                            external_interrupt_pending <= 0;
+                        end
+                    end else if (op_is_mret) begin
+                        // MRET
+                        interrupts_enabled <= temp_interrupts_enabled;
+                    end else if (op_is_csr) begin
+                        // CSR*
+                        if (addr_exception_i == 12'h300) begin
+                            // mstatus
+                            prior_interrupts_enabled <= write_value_or_mask[7] | (write_value_and_mask[7] & prior_interrupts_enabled);
+                            interrupts_enabled <= write_value_or_mask[3] | (write_value_and_mask[3] & interrupts_enabled);
+                        end else if (addr_exception_i == 12'h304) begin
+                            // mie
+                            external_interrupt_enabled <= write_value_or_mask[11] | (write_value_and_mask[11] & external_interrupt_enabled);
+                            software_interrupt_enabled <= write_value_or_mask[3] | (write_value_and_mask[3] & software_interrupt_enabled);
+                        end else if (addr_exception_i == 12'h341) begin
+                            // mepc
+                            exception_pc <= {write_value_or_mask[31:2] | (write_value_and_mask[31:2] & exception_pc[31:2]), 2'b0};
+                        end else if (addr_exception_i == 12'h342) begin
+                            // mcause
+                            trap_is_interrupt <= write_value_or_mask[31] | (write_value_and_mask[31] & trap_is_interrupt);
+                            exception_code <= write_value_or_mask[3:0] | (write_value_and_mask[3:0] & exception_code);
+                        end else if (addr_exception_i == 12'h344) begin
+                            // mip
+                            external_interrupt_pending <= write_value_or_mask[11] | (write_value_and_mask[11] & external_interrupt_pending);
+                            software_interrupt_pending <= write_value_or_mask[3] | (write_value_and_mask[3] & software_interrupt_pending);
+                        end else begin
+                            // invalid register
+                            fault_o <= 1;
+                        end
+                    end else if (op_is_nop) begin
+                        // do nothing
+                    end else begin
+                        // invalid op
+                        fault_o <= 1;
+                    end
+                end
+            end
+            if (ext_int_i)
+                external_interrupt_pending <= 1;
+        end
     end
 
 `ifdef FORMAL
-    initial assume(~reset_n);
+    initial assume(~reset_n_i);
     reg f_past_valid;
     initial f_past_valid = 1'b0;
-    always @(posedge clk) begin
+    always @(posedge clk_i) begin
         f_past_valid = 1;
     end
 
-    always @(posedge clk) begin
+    always @(posedge clk_i) begin
         if (f_past_valid) begin
-            assume(started | ~busy);
-            if (available) begin
-                assume($stable(op));
-                assume($stable(addr_exception));
-                assume($stable(write_value));
-            end
-            if (busy) begin
-                assume(available);
-            end
-            if ($past(~reset_n)) begin
-                assert(!busy);
-                assert(!fault);
-                assert(!ext_int_pending);
-                assert(!sw_int_pending);
-            end else begin
-                if ($past(reset_n, 2)) begin
-                    if ($past(ext_int, 2) && !$past(ext_int, 3) && $past(external_interrupt_enabled) && $past(interrupts_enabled)) begin
-                        assert(ext_int_pending);
-                    end
-                    if ($past(busy, 2) && !$past(busy) && $past(addr_exception, 2) == 12'h344 && $past(op[2], 2) && $past(op[1:0], 2) != 2'b0 && $past(software_interrupt_pending_value, 2) && $past(software_interrupt_enabled) && $past(interrupts_enabled)) begin
-                        assert(sw_int_pending);
-                    end
-                    if ($past(op, 2) == 3'b000 && $past(busy, 2) && !$past(busy)) begin
-                        // we executed an exception 2 cycles ago
-                        if ($past(ext_int_pending, 2) && $past(addr_exception[4:0], 2) == 5'b11011) begin
-                            assert(!ext_int_pending);
-                        end
-                        if ($past(sw_int_pending, 2) && $past(addr_exception[4:0], 2) == 5'b10011) begin
-                            assert(!sw_int_pending);
-                        end
-                    end
+            if (!$past(reset_n_i)) begin
+                assert(!fault_o);
+                assert(!ext_int_pending_o);
+                assert(!sw_int_pending_o);
+                assert(exception_pc == 32'b0);
+                assert(!interrupts_enabled);
+                assert(!prior_interrupts_enabled);
+                assert(!external_interrupt_enabled);
+                assert(!external_interrupt_pending);
+                assert(!software_interrupt_enabled);
+                assert(!software_interrupt_pending);
+                assert(exception_code == 4'b0);
+                assert(!trap_is_interrupt);
+            end else if ($past(reset_n_i, 2)) begin
+                assume($past(available_i));
+                if ($past(ext_int_i)) begin
+                    // the external interrupt was asserted, so should be pending
+                    assert(external_interrupt_pending);
                 end
-                if ($past(busy) & ~busy) begin
-                    if ($past(op) == 3'b000) begin
-                        // exception
-                        assert(exception_code == $past(addr_exception[3:0]));
-                        assert(trap_is_interrupt == $past(addr_exception[4]));
-                        assert(exception_pc[31:2] == $past(write_value[31:2]));
-                        assert(exception_pc[1:0] == 2'b0);
-                        assert(read_value[31:2] == IRQ_HANDLER_ADDR[31:2]);
-                        assert(!interrupts_enabled);
-                        assert(prior_interrupts_enabled == $past(interrupts_enabled));
-                        assert(!fault);
-                    end else if ($past(op) == 3'b001) begin
-                        // MRET
-                        assert(read_value == $past(exception_pc));
-                        assert(interrupts_enabled == $past(prior_interrupts_enabled));
-                        assert(!fault);
-                    end else if ($past(op[2]) && ($past(op[1:0]) != 2'b0)) begin
-                        // CSR* instruction
-                        case ($past(addr_exception))
-                            12'h300: begin // mstatus
-                                assert(read_value == {28'b0, $past(prior_interrupts_enabled), 3'b0, $past(interrupts_enabled), 3'b0});
-                                if ($past(op) == 3'b101)
-                                    assert(interrupts_enabled == $past(write_value[3]));
-                                else if ($past(op) == 3'b110)
-                                    assert(interrupts_enabled == ($past(interrupts_enabled) | $past(write_value[3])));
-                                else if ($past(op) == 3'b111)
-                                    assert(interrupts_enabled == ($past(interrupts_enabled) & ~$past(write_value[3])));
-                                if ($past(op) == 3'b101)
-                                    assert(prior_interrupts_enabled == $past(write_value[7]));
-                                else if ($past(op) == 3'b110)
-                                    assert(prior_interrupts_enabled == ($past(prior_interrupts_enabled) | $past(write_value[7])));
-                                else if ($past(op) == 3'b111)
-                                    assert(prior_interrupts_enabled == ($past(prior_interrupts_enabled) & ~$past(write_value[7])));
-                                assert(!fault);
-                            end
-                            12'h304: begin // mie
-                                assert(read_value == {20'b0, $past(external_interrupt_enabled), 7'b0, $past(software_interrupt_enabled), 3'b0});
-                                if ($past(op) == 3'b101)
-                                    assert(external_interrupt_enabled == $past(write_value[11]));
-                                else if ($past(op) == 3'b110)
-                                    assert(external_interrupt_enabled == ($past(external_interrupt_enabled) | $past(write_value[11])));
-                                else if ($past(op) == 3'b111)
-                                    assert(external_interrupt_enabled == ($past(external_interrupt_enabled) & ~$past(write_value[11])));
-                                if ($past(op) == 3'b101)
-                                    assert(software_interrupt_enabled == $past(write_value[3]));
-                                else if ($past(op) == 3'b110)
-                                    assert(software_interrupt_enabled == ($past(software_interrupt_enabled) | $past(write_value[3])));
-                                else if ($past(op) == 3'b111)
-                                    assert(software_interrupt_enabled == ($past(software_interrupt_enabled) & ~$past(write_value[3])));
-                                assert(!fault);
-                            end
-                            12'h341: begin // mepc
-                                assert(!fault);
-                                assert(read_value == $past(exception_pc));
-                                if ($past(op) == 3'b101)
-                                    assert(exception_pc[31:2] == $past(write_value[31:2]));
-                                else if ($past(op) == 3'b110)
-                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) | $past(write_value[31:2])));
-                                else if ($past(op) == 3'b111)
-                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) & ~$past(write_value[31:2])));
-                            end
-                            12'h342: begin // mcause
-                                if (!fault) begin
-                                    assert(read_value == {$past(trap_is_interrupt), 27'b0, $past(exception_code)});
-                                    assert(exception_code == $past(exception_code));
-                                    assert(trap_is_interrupt == $past(trap_is_interrupt));
-                                end
-                                if ($past(op) == 3'b101)
-                                    assert(fault);
-                                else if ($past(op) == 3'b110)
-                                    assert(fault == ($past(write_value) != 0));
-                                else if ($past(op) == 3'b111)
-                                    assert(fault == ($past(write_value) != 0));
-                                else
-                                    assert(0);
-                            end
-                            12'h344: begin // mip
-                                assert(read_value == {20'b0, $past(external_interrupt_pending), 7'b0, $past(software_interrupt_pending), 3'b0});
-                                if ($past(op) == 3'b101)
-                                    assert(software_interrupt_pending == $past(write_value[3]));
-                                else if ($past(op) == 3'b110)
-                                    assert(software_interrupt_pending == ($past(software_interrupt_pending) | $past(write_value[3])));
-                                else if ($past(op) == 3'b111)
-                                    assert(software_interrupt_pending == ($past(software_interrupt_pending) & ~$past(write_value[3])));
-                                assert(!fault);
-                            end
-                            default: begin
-                                assert(fault);
-                            end
-                        endcase
+                if ($past(external_interrupt_pending) && $past(external_interrupt_enabled) && $past(interrupts_enabled)) begin
+                    assert(ext_int_pending_o);
+                end else begin
+                    assert(~ext_int_pending_o);
+                end
+                if ($past(software_interrupt_pending) && $past(software_interrupt_enabled) && $past(interrupts_enabled)) begin
+                    assert(sw_int_pending_o);
+                end else begin
+                    assert(~sw_int_pending_o);
+                end
+                if ($past(op_i) == 3'b000) begin
+                    // exception
+                    assert(!fault_o);
+                    if (!$past(is_write_stage_i)) begin
+                        // read stage
+                        assert(read_value_o[31:2] == IRQ_HANDLER_ADDR[31:2]);
+                        assert(temp_interrupts_enabled == $past(interrupts_enabled));
                     end else begin
-                        assert(fault);
+                        // write stage
+                        assert(exception_code == $past(addr_exception_i[3:0]));
+                        assert(trap_is_interrupt == $past(addr_exception_i[4]));
+                        assert(exception_pc[31:2] == $past(write_value_i[31:2]));
+                        assert(exception_pc[1:0] == 2'b0);
+                        assert(!interrupts_enabled);
+                        assert(prior_interrupts_enabled == $past(temp_interrupts_enabled));
+                        if ($past(addr_exception_i[4:0]) == 5'b10011) begin
+                            assert(!software_interrupt_pending);
+                        end else begin
+                            assert(software_interrupt_pending == $past(software_interrupt_pending));
+                        end
                     end
+                end else if ($past(op_i) == 3'b001) begin
+                    // MRET
+                    assert(!fault_o);
+                    if (!$past(is_write_stage_i)) begin
+                        // read stage
+                        assert(read_value_o == $past(exception_pc));
+                        assert(temp_interrupts_enabled == $past(prior_interrupts_enabled));
+                    end else begin
+                        // write stage
+                        assert(interrupts_enabled == $past(temp_interrupts_enabled));
+                        assert(exception_pc == $past(exception_pc));
+                    end
+                end else if ($past(op_i[2]) && ($past(op_i[1:0]) != 2'b0)) begin
+                    // CSR* instruction
+                    case ($past(addr_exception_i))
+                        12'h300: begin // mstatus
+                            assert(!fault_o);
+                            if (!$past(is_write_stage_i)) begin
+                                // read stage
+                                assert(read_value_o == {28'b0, $past(prior_interrupts_enabled), 3'b0, $past(interrupts_enabled), 3'b0});
+                            end else begin
+                                // write stage
+                                if ($past(op_i) == 3'b101)
+                                    assert(interrupts_enabled == $past(write_value_i[3]));
+                                else if ($past(op_i) == 3'b110)
+                                    assert(interrupts_enabled == ($past(interrupts_enabled) | $past(write_value_i[3])));
+                                else if ($past(op_i) == 3'b111)
+                                    assert(interrupts_enabled == ($past(interrupts_enabled) & ~$past(write_value_i[3])));
+                                if ($past(op_i) == 3'b101)
+                                    assert(prior_interrupts_enabled == $past(write_value_i[7]));
+                                else if ($past(op_i) == 3'b110)
+                                    assert(prior_interrupts_enabled == ($past(prior_interrupts_enabled) | $past(write_value_i[7])));
+                                else if ($past(op_i) == 3'b111)
+                                    assert(prior_interrupts_enabled == ($past(prior_interrupts_enabled) & ~$past(write_value_i[7])));
+                            end
+                        end
+                        12'h304: begin // mie
+                            assert(!fault_o);
+                            if (!$past(is_write_stage_i)) begin
+                                // read stage
+                                assert(read_value_o == {20'b0, $past(external_interrupt_enabled), 7'b0, $past(software_interrupt_enabled), 3'b0});
+                            end else begin
+                                // write stage
+                                if ($past(op_i) == 3'b101)
+                                    assert(external_interrupt_enabled == $past(write_value_i[11]));
+                                else if ($past(op_i) == 3'b110)
+                                    assert(external_interrupt_enabled == ($past(external_interrupt_enabled) | $past(write_value_i[11])));
+                                else if ($past(op_i) == 3'b111)
+                                    assert(external_interrupt_enabled == ($past(external_interrupt_enabled) & ~$past(write_value_i[11])));
+                                if ($past(op_i) == 3'b101)
+                                    assert(software_interrupt_enabled == $past(write_value_i[3]));
+                                else if ($past(op_i) == 3'b110)
+                                    assert(software_interrupt_enabled == ($past(software_interrupt_enabled) | $past(write_value_i[3])));
+                                else if ($past(op_i) == 3'b111)
+                                    assert(software_interrupt_enabled == ($past(software_interrupt_enabled) & ~$past(write_value_i[3])));
+                            end
+                        end
+                        12'h341: begin // mepc
+                            assert(!fault_o);
+                            if (!$past(is_write_stage_i)) begin
+                                // read stage
+                                assert(read_value_o == $past(exception_pc));
+                            end else begin
+                                // write stage
+                                if ($past(op_i) == 3'b101)
+                                    assert(exception_pc[31:2] == $past(write_value_i[31:2]));
+                                else if ($past(op_i) == 3'b110)
+                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) | $past(write_value_i[31:2])));
+                                else if ($past(op_i) == 3'b111)
+                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) & ~$past(write_value_i[31:2])));
+                            end
+                        end
+                        12'h342: begin // mcause
+                            assert(!fault_o);
+                            if (!$past(is_write_stage_i)) begin
+                                // read stage
+                                assert(read_value_o == {$past(trap_is_interrupt), 27'b0, $past(exception_code)});
+                            end else begin
+                                // write stage
+                                if ($past(op_i) == 3'b101)
+                                    assert(exception_code == $past(write_value_i[3:0]));
+                                else if ($past(op_i) == 3'b110)
+                                    assert(exception_code == ($past(exception_code[3:0]) | $past(write_value_i[3:0])));
+                                else if ($past(op_i) == 3'b111)
+                                    assert(exception_code == ($past(exception_code[3:0]) & ~$past(write_value_i[3:0])));
+                            end
+                        end
+                        12'h344: begin // mip
+                            assert(!fault_o);
+                            if (!$past(is_write_stage_i)) begin
+                                // read stage
+                                assert(read_value_o == {20'b0, $past(external_interrupt_pending), 7'b0, $past(software_interrupt_pending), 3'b0});
+                            end else begin
+                                // write stage
+                                if ($past(op_i) == 3'b101)
+                                    assert(software_interrupt_pending == $past(write_value_i[3]));
+                                else if ($past(op_i) == 3'b110)
+                                    assert(software_interrupt_pending == ($past(software_interrupt_pending) | $past(write_value_i[3])));
+                                else if ($past(op_i) == 3'b111)
+                                    assert(software_interrupt_pending == ($past(software_interrupt_pending) & ~$past(write_value_i[3])));
+                            end
+                        end
+                        default: begin
+                            assert(fault_o);
+                        end
+                    endcase
+                end else begin
+                    assert(fault_o);
                 end
             end
         end

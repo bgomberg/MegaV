@@ -19,7 +19,6 @@ module instruction_decode(
     output [15:0] ex_csr_microcode, // Execute stage CSR microcode
     output [9:0] wb_rf_microcode, // Write back stage register file microcode
     output [1:0] wb_pc_mux_position, // Write back stage program counter microcode (00=npc, 01=I[31:1], 10=pc+offset, 11=Y?I+offset:npc)
-    output busy, // Operation busy
     output fault // Fault condition (i.e. invalid instruction)
 );
 
@@ -35,7 +34,6 @@ module instruction_decode(
     reg [15:0] ex_csr_microcode;
     reg [9:0] wb_rf_microcode;
     reg [1:0] wb_pc_mux_position;
-    reg busy;
     reg fault;
 
     /* Basic Decode */
@@ -116,13 +114,12 @@ module instruction_decode(
     };
 
     /* Logic */
-    reg started;
     wire invalid_instr = invalid_opcode | invalid_rs | invalid_funct7 | invalid_funct3 | invalid_rd;
     always @(posedge clk) begin
-        busy <= reset_n & ~started & available;
-        started <= reset_n & available;
-        fault <= reset_n & available & invalid_instr;
-        if (reset_n & busy & started) begin
+        if (~reset_n) begin
+            fault <= 0;
+        end else if (available) begin
+            fault <= invalid_instr;
             /* Read Stage */
             rd_rf_microcode <= {
                 ~invalid_instr & rd_rf_enable,
@@ -180,6 +177,8 @@ module instruction_decode(
                 (opcode_is_branch | opcode_is_jal),
                 (opcode_is_jalr | opcode_is_branch | instr_is_system_e_mret)
             };
+        end else begin
+            fault <= 0;
         end
     end
 
@@ -204,17 +203,10 @@ module instruction_decode(
     wire has_ma_stage = ma_mem_microcode[4];
     always @(posedge clk) begin
         if (f_past_valid) begin
-            assume(started | ~busy);
-            if (available) begin
-                assume($stable(instr));
-            end
-            if (busy) begin
-                assume(available);
-            end
             if (!$past(reset_n)) begin
-                assert(!busy);
                 assert(!fault);
-            end else if ($past(busy) && !busy) begin
+            end else begin
+                assume($past(available));
                 case ($past(instr[6:0]))
                     7'b0110111: begin // LUI
                         assert($past(opcode_is_lui));

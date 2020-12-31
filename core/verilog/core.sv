@@ -16,15 +16,6 @@ module core(
 );
 
     /* FSM */
-    wire [`NUM_STAGES-1:0] stage_done;
-    assign stage_done[`STAGE_CONTROL] = 1'b1;
-    assign stage_done[`STAGE_FETCH] = ~mem_busy & ~alu_busy;
-    assign stage_done[`STAGE_DECODE] = ~decode_busy;
-    assign stage_done[`STAGE_READ] = ~rf_busy;
-    assign stage_done[`STAGE_EXECUTE] = ~alu_busy & ~csr_busy;
-    assign stage_done[`STAGE_MEMORY] = ~mem_busy;
-    assign stage_done[`STAGE_WRITE_BACK] = ~rf_busy & ~alu_busy;
-    assign stage_done[`STAGE_UPDATE_PC] = ~pc_busy;
     /* verilator lint_off UNOPT */
     wire [`NUM_STAGES-1:0] stage_active /* verilator public */;
     /* verilator lint_on UNOPT */
@@ -37,7 +28,6 @@ module core(
     fsm fsm_module(
         clk,
         reset_n,
-        stage_done,
         decode_fault | mem_op_fault | alu_fault | csr_fault,
         mem_addr_fault,
         mem_access_fault,
@@ -54,21 +44,18 @@ module core(
     reg [31:0] pc_offset_pc /* verilator public */;
     wire [31:1] pc_in = (~decode_wb_pc_mux_position[1] & decode_wb_pc_mux_position[0]) ? ex_out[31:1] : (
         (decode_wb_pc_mux_position[1] & (~decode_wb_pc_mux_position[0] | ex_alu_out[0])) ? pc_offset_pc[31:1] : pc_next_pc[31:1]);
-    wire pc_busy;
     program_counter pc_module(
         clk,
         reset_n,
         stage_active[`STAGE_UPDATE_PC],
         {pc_in, 1'b0},
-        pc_pc,
-        pc_busy);
+        pc_pc);
 
     /* Memory */
     wire [31:0] mem_out /* verilator public */;
-    wire mem_busy;
-    wire mem_op_fault;
-    wire mem_addr_fault;
-    wire mem_access_fault;
+    wire mem_op_fault /* verilator public */;
+    wire mem_addr_fault /* verilator public */;
+    wire mem_access_fault /* verilator public */;
     memory mem_module(
         clk,
         reset_n,
@@ -76,10 +63,9 @@ module core(
         stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[3],
         stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[2],
         stage_active[`STAGE_FETCH] ? 2'b10 : decode_ma_mem_microcode[1:0],
-        stage_active[`STAGE_FETCH] ? pc_pc : ex_alu_out,
+        stage_active[`STAGE_FETCH] ? pc_pc : alu_out,
         rf_read_data_b,
         mem_out,
-        mem_busy,
         mem_op_fault,
         mem_addr_fault,
         mem_access_fault);
@@ -102,7 +88,6 @@ module core(
     wire decode_has_read_stage;
     wire decode_fault;
     wire [31:0] instr /* verilator public */ = control_op_normal ? mem_out : 32'h00000073; // interrupt using ECALL
-    wire decode_busy;
     instruction_decode decode_module(
         clk,
         reset_n,
@@ -119,7 +104,6 @@ module core(
         decode_ex_csr_microcode,
         decode_wb_rf_microcode,
         decode_wb_pc_mux_position,
-        decode_busy,
         decode_fault);
 
     /* Register file */
@@ -130,7 +114,6 @@ module core(
         pc_next_pc));
     wire [31:0] rf_read_data_a /* verilator public */;
     wire [31:0] rf_read_data_b /* verilator public */;
-    wire rf_busy;
     register_file rf_module(
         clk,
         reset_n,
@@ -141,15 +124,13 @@ module core(
         decode_rd_rf_microcode[7:4],
         rf_read_data_a,
         decode_rd_rf_microcode[3:0],
-        rf_read_data_b,
-        rf_busy);
+        rf_read_data_b);
 
     /* ALU */
     reg [31:0] ex_alu_out;
     wire [31:0] alu_out /* verilator public */;
     wire [31:0] alu_in_a = (stage_active[`STAGE_FETCH] | stage_active[`STAGE_WRITE_BACK] | decode_alu_a_mux_position) ? pc_pc : rf_read_data_a;
     wire [31:0] alu_in_b = stage_active[`STAGE_FETCH] ? 32'h00000004 : ((stage_active[`STAGE_WRITE_BACK] | decode_alu_b_mux_position) ? decode_imm : rf_read_data_b);
-    wire alu_busy;
     wire alu_fault;
     alu alu_module(
         clk,
@@ -159,19 +140,19 @@ module core(
         alu_in_a,
         alu_in_b,
         alu_out,
-        alu_busy,
         alu_fault);
-    always @(posedge clk) begin
-        if (stage_active[`STAGE_FETCH] & ~alu_busy) begin
-            pc_next_pc <= alu_out;
-        end else if (stage_active[`STAGE_EXECUTE] & ~alu_busy) begin
-            ex_alu_out <= alu_out;
-        end else if (stage_active[`STAGE_WRITE_BACK] & ~alu_busy) begin
-            pc_offset_pc <= alu_out;
+    always @(*) begin
+        if (stage_active[`STAGE_DECODE]) begin
+            pc_next_pc = alu_out;
+        end else if (stage_active[`STAGE_EXECUTE]) begin
+            ex_alu_out = alu_out;
+        end else if (stage_active[`STAGE_WRITE_BACK]) begin
+            pc_offset_pc = alu_out;
         end
     end
 
     /* CSR */
+    wire [2:0] csr_op = ((stage_active[`STAGE_EXECUTE] | stage_active[`STAGE_MEMORY]) & decode_ex_csr_microcode[15]) ? decode_ex_csr_microcode[2:0] : 3'b011;
     wire [3:0] csr_trap_num = control_op_trap ? {1'b0, fault_num} : {control_op_ext_int, 3'b011};
     wire [11:0] csr_addr_exception /* verilator public */ = control_op_normal ? decode_ex_csr_microcode[14:3] :
         {7'b0, control_op_ext_int | control_op_sw_int, csr_trap_num};
@@ -180,22 +161,21 @@ module core(
         (decode_csr_mux_position == 2'b10) ? (~control_op_normal ? pc_pc : pc_next_pc) :
         32'b0));
     wire [31:0] csr_read_value /* verilator public */;
-    wire csr_busy;
     wire csr_fault;
     wire csr_ext_int_pending;
     wire csr_sw_int_pending;
     csr csr_module(
         clk,
         reset_n,
-        stage_active[`STAGE_EXECUTE] & decode_ex_csr_microcode[15],
+        stage_active[`STAGE_EXECUTE] | stage_active[`STAGE_MEMORY],
+        stage_active[`STAGE_MEMORY] & decode_ex_csr_microcode[15],
         ext_int,
-        decode_ex_csr_microcode[2:0],
+        csr_op,
         csr_addr_exception,
         csr_in,
         csr_read_value,
         csr_ext_int_pending,
         csr_sw_int_pending,
-        csr_busy,
         csr_fault
     );
 

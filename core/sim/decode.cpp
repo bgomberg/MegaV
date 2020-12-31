@@ -3,6 +3,8 @@
 #include <stdio.h>
 
 
+#define USE_ABI_NAMES 0
+
 #define BIT(VAL, POS) \
 	(((VAL) >> (POS)) & 1)
 #define BITS(VAL, TOP, BOTTOM) \
@@ -10,6 +12,7 @@
 
 
 static const char * const REGISTER_NAMES[] = {
+#if USE_ABI_NAMES
 	"zero",
 	"ra",
 	"sp",
@@ -26,6 +29,24 @@ static const char * const REGISTER_NAMES[] = {
 	"a3",
 	"a4",
 	"a5",
+#else
+	"x0",
+	"x1",
+	"x2",
+	"x3",
+	"x4",
+	"x5",
+	"x6",
+	"x7",
+	"x8",
+	"x9",
+	"x10",
+	"x11",
+	"x12",
+	"x13",
+	"x14",
+	"x15",
+#endif
 };
 
 

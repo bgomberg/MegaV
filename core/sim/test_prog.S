@@ -45,9 +45,17 @@ l1:
   jal   l3
 
 l2:
+  li    t0, 0
+  bne   a5, t0, fail
+  li    t0, 0x101
   ecall
+  bne   a5, t0, fail
+  li    t0, 0x203
   ebreak
+  bne   a5, t0, fail
+  li    t0, 0x30b
   csrsi mip, 0x08 # Trigger a SW interrupt
+  bne   a5, t0, fail
   ori   a5, a5, 0x10
   addi  a5, a5, 0x100
   j     .
@@ -60,6 +68,9 @@ l3:
 
 l4:
   jal   gp, l2
+
+fail:
+  j     .
 
 irq_handler_ecall:
   ori   a5, a5, 0x01

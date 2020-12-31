@@ -2,9 +2,6 @@
 PROJECT_NAME := core
 BUILD_DIR := build
 
-# Makefile configuration
-SBY_MODULE ?= core
-
 # Project files
 TOP_VERILOG_SRC_FILE := verilog/core.sv
 VERILOG_SRC_FILES := \
@@ -135,8 +132,21 @@ $(OBJ_DIR)/%.o: $(SIM_COMPLIANCE_SRC_DIR)/%.S $(wildcard $(SIM_COMPLIANCE_INC_DI
 	@echo "Compiling $(notdir $@)"
 	@$(RISCV_CC) -march=rv32e -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles -I$(SIM_COMPLIANCE_INC_DIR) $< -o $@
 
-sby:
-	@$(SBY) -d $(OBJ_DIR)/sby -f $(SBY_CONFIG_FILE) $(SBY_MODULE)
+SBY_MODULES := \
+	program_counter \
+	register_file \
+	alu \
+	csr \
+	memory \
+	instruction_decode \
+	fsm \
+	adder4 \
+	adder32
+SBY_RESULTS := $(addprefix $(OBJ_DIR)/sby/,$(SBY_MODULES:=.pass))
+$(OBJ_DIR)/sby/%.pass: verilog/%.sv | $(OBJ_DIR)
+	@$(SBY) -d $(OBJ_DIR)/sby/$(basename $(notdir $@)) -f $(SBY_CONFIG_FILE) $(basename $(notdir $@))
+	@cp $(OBJ_DIR)/sby/$(basename $(notdir $@))/PASS $@
+sby: $(SBY_RESULTS)
 
 all: build_sim gates_json
 
