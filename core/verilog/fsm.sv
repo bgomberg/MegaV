@@ -12,27 +12,22 @@
  * FSM.
  */
 module fsm(
-    input clk, // Clock signal
-    input reset_n, // Reset signal (active low)
-    input illegal_instr_fault, // Illegal instruction fault
-    input mem_addr_fault, // Memory address fault
-    input mem_access_fault, // Memory access fault
-    input mem_fault_is_store, // Memory fault is related to a store operation
-    input ext_int, // External interrupt
-    input sw_int, // Software interrupt
-    output [`NUM_STAGES-1:0] stage_active, // Current stage
-    output [1:0] control_op, // Control operation (2'b00=trap, 2'b01=ext_int, 2'b10=sw_int, 2'b11=normal)
-    output [2:0] fault_num // Active fault number
+    input logic clk, // Clock signal
+    input logic reset_n, // Reset signal (active low)
+    input logic illegal_instr_fault, // Illegal instruction fault
+    input logic mem_addr_fault, // Memory address fault
+    input logic mem_access_fault, // Memory access fault
+    input logic mem_fault_is_store, // Memory fault is related to a store operation
+    input logic ext_int, // External interrupt
+    input logic sw_int, // Software interrupt
+    output logic [`NUM_STAGES-1:0] stage_active, // Current stage
+    output logic [1:0] control_op, // Control operation (2'b00=trap, 2'b01=ext_int, 2'b10=sw_int, 2'b11=normal)
+    output logic [2:0] fault_num // Active fault number
 );
 
-    /* Outputs */
-    reg [`NUM_STAGES-1:0] stage_active;
-    reg [1:0] control_op;
-    reg [2:0] fault_num;
-
     /* Logic */
-    reg fault;
-    reg in_progress;
+    logic fault;
+    logic in_progress;
     wire [`NUM_STAGES-1:0] next_stage = {stage_active[`NUM_STAGES-2:0], stage_active[`NUM_STAGES-1]};
     wire current_stage_done = in_progress;
     wire mem_fault = mem_addr_fault | mem_access_fault;
@@ -47,7 +42,7 @@ module fsm(
     };
     wire fault_value = reset_n & (current_stage_done ? active_fault : fault);
     wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         fault_num <= active_fault ? active_fault_num : fault_num;
             fault <= fault_value;
         if (~reset_n) begin
@@ -71,14 +66,14 @@ module fsm(
 
 `ifdef FORMAL
     initial assume(~reset_n);
-    reg f_past_valid;
+    logic f_past_valid;
     initial f_past_valid = 0;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         f_past_valid = 1;
     end
 
     /* Validate logic */
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (f_past_valid) begin
             // Only one bit in stage_active should ever be set
             assume($past(stage_active & (stage_active - 1)) == 0);

@@ -5,7 +5,6 @@
 #include <Vmodule_core.h>
 #include <Vmodule_memory.h>
 #include <Vmodule_register_file.h>
-#include <Vmodule_fsm.h>
 
 #include <verilated.h>
 

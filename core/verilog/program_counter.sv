@@ -3,18 +3,15 @@
  */
 /* verilator lint_off UNUSED */
 module program_counter(
-    input clk, // Clock signal
-    input reset_n, // Reset signal (active low)
-    input available, // Operation available
-    input [31:0] in, // Input data
-    output [31:0] pc // Current PC
+    input logic clk, // Clock signal
+    input logic reset_n, // Reset signal (active low)
+    input logic available, // Operation available
+    input logic [31:0] in, // Input data
+    output logic [31:0] pc // Current PC
 );
 
-    /* Outputs */
-    reg [31:0] pc;
-
     /* Logic */
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (~reset_n) begin
             // Reset
             pc <= 32'b0;
@@ -25,14 +22,14 @@ module program_counter(
 
 `ifdef FORMAL
     initial assume(~reset_n);
-    reg f_past_valid;
+    logic f_past_valid;
     initial f_past_valid = 0;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         f_past_valid = 1;
     end
 
     /* Validate logic */
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (f_past_valid) begin
             if ($past(~reset_n)) begin
                 assert(pc == 0);

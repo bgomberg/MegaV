@@ -2,27 +2,23 @@
  * A 16x32 register file with r0 tied to 0 and two read ports and one write port.
  */
 module register_file(
-    input clk, // Clock signal
-    input reset_n, // Reset signal (active low)
-    input available, // Operation available
-    input write_en, // Perform a write operation
-    input [3:0] write_addr, // Address to write to
-    input [31:0] write_data, // Data to be written
-    input [3:0] read_addr_a, // Address to read from (bus A)
-    output [31:0] read_data_a, // Data which was read (bus A)
-    input [3:0] read_addr_b, // Address to read from (bus B)
-    output [31:0] read_data_b // Data which was read (bus B)
+    input logic clk, // Clock signal
+    input logic reset_n, // Reset signal (active low)
+    input logic available, // Operation available
+    input logic write_en, // Perform a write operation
+    input logic [3:0] write_addr, // Address to write to
+    input logic [31:0] write_data, // Data to be written
+    input logic [3:0] read_addr_a, // Address to read from (bus A)
+    output logic [31:0] read_data_a, // Data which was read (bus A)
+    input logic [3:0] read_addr_b, // Address to read from (bus B)
+    output logic [31:0] read_data_b // Data which was read (bus B)
 );
 
-    /* Outputs */
-    reg [31:0] read_data_a;
-    reg [31:0] read_data_b;
-
     /* Internal variables */
-    reg [31:0] registers[1:15] /* verilator public */;
+    logic [31:0] registers[1:15] /* verilator public */;
 
     /* Logic */
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (~reset_n) begin
             // Reset
             registers[1] <= 32'b0;
@@ -51,20 +47,20 @@ module register_file(
 
 `ifdef FORMAL
     initial assume(~reset_n);
-    reg f_past_valid;
+    logic f_past_valid;
     initial f_past_valid = 0;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         f_past_valid = 1;
     end
 
     (* anyconst *) wire [3:0] f_read_addr_a;
     (* anyconst *) wire [3:0] f_read_addr_b;
     (* anyconst *) wire [3:0] f_write_addr;
-    reg [31:0] f_read_data_a;
-    reg [31:0] f_read_data_b;
+    logic [31:0] f_read_data_a;
+    logic [31:0] f_read_data_b;
     initial f_read_data_a = registers[f_read_addr_a];
     initial f_read_data_b = registers[f_read_addr_b];
-    always @(*) begin
+    always_comb begin
         if (f_read_addr_a != 0) begin
             assert(registers[f_read_addr_a] == f_read_data_a);
         end
@@ -73,7 +69,7 @@ module register_file(
         end
     end
 
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (f_past_valid & $past(reset_n)) begin
             assume($past(available));
             if ($past(write_en)) begin

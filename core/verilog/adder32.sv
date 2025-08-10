@@ -36,7 +36,7 @@ module adder32(
     /* Validate logic */
     (* anyconst *) wire [3:0] f_a;
     (* anyconst *) wire [3:0] f_b;
-    always @(*) begin
+    always_comb begin
         assume(prop == (f_a ^ f_b));
         assume(gen == (f_a & f_b));
         assert(sum == (f_a + f_b + carry_in));

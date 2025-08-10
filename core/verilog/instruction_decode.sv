@@ -2,39 +2,25 @@
  * A decoder for the RV32I instruction set.
  */
 module instruction_decode(
-    input clk, // Clock signal
-    input reset_n, // Reset signal (active low)
-    input available, // Operation available
-    input [31:0] instr, // Instruction to decode
-    output [31:0] imm, // Immediate value
-    output alu_a_mux_position, // Position of the ALU A mux (0=rs1, 1=pc)
-    output alu_b_mux_position, // Position of the ALU B mux (0=rs2, 1=imm)
-    output [1:0] csr_mux_position, // Position of the CSR mux (0=rs1, 1=imm, 2=npc, 3=UNUSED)
-    output [1:0] wb_mux_position, // Position of the write back mux (0=alu_res, 1=imm, 2=mem_data, 3=npc)
+    input logic clk, // Clock signal
+    input logic reset_n, // Reset signal (active low)
+    input logic available, // Operation available
+    input logic [31:0] instr, // Instruction to decode
+    output logic [31:0] imm, // Immediate value
+    output logic alu_a_mux_position, // Position of the ALU A mux (0=rs1, 1=pc)
+    output logic alu_b_mux_position, // Position of the ALU B mux (0=rs2, 1=imm)
+    output logic [1:0] csr_mux_position, // Position of the CSR mux (0=rs1, 1=imm, 2=npc, 3=UNUSED)
+    output logic [1:0] wb_mux_position, // Position of the write back mux (0=alu_res, 1=imm, 2=mem_data, 3=npc)
     /* verilator lint_off UNOPTFLAT */
-    output [8:0] rd_rf_microcode, // Read stage register file microcode
+    output logic [8:0] rd_rf_microcode, // Read stage register file microcode
     /* verilator lint_on UNOPTFLAT */
-    output [5:0] ex_alu_microcode, // Execute stage ALU microcode
-    output [4:0] ma_mem_microcode, // Memory access stage memory microcode
-    output [15:0] ex_csr_microcode, // Execute stage CSR microcode
-    output [9:0] wb_rf_microcode, // Write back stage register file microcode
-    output [1:0] wb_pc_mux_position, // Write back stage program counter microcode (00=npc, 01=I[31:1], 10=pc+offset, 11=Y?I+offset:npc)
-    output fault // Fault condition (i.e. invalid instruction)
+    output logic [5:0] ex_alu_microcode, // Execute stage ALU microcode
+    output logic [4:0] ma_mem_microcode, // Memory access stage memory microcode
+    output logic [15:0] ex_csr_microcode, // Execute stage CSR microcode
+    output logic [9:0] wb_rf_microcode, // Write back stage register file microcode
+    output logic [1:0] wb_pc_mux_position, // Write back stage program counter microcode (00=npc, 01=I[31:1], 10=pc+offset, 11=Y?I+offset:npc)
+    output logic fault // Fault condition (i.e. invalid instruction)
 );
-
-    /* Outputs */
-    reg [31:0] imm;
-    reg alu_a_mux_position;
-    reg alu_b_mux_position;
-    reg [1:0] csr_mux_position;
-    reg [1:0] wb_mux_position;
-    reg [8:0] rd_rf_microcode;
-    reg [5:0] ex_alu_microcode;
-    reg [4:0] ma_mem_microcode;
-    reg [15:0] ex_csr_microcode;
-    reg [9:0] wb_rf_microcode;
-    reg [1:0] wb_pc_mux_position;
-    reg fault;
 
     /* Basic Decode */
     wire [6:0] opcode = instr[6:0];
@@ -115,7 +101,7 @@ module instruction_decode(
 
     /* Logic */
     wire invalid_instr = invalid_opcode | invalid_rs | invalid_funct7 | invalid_funct3 | invalid_rd;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (~reset_n) begin
             fault <= 0;
         end else if (available) begin
@@ -184,14 +170,14 @@ module instruction_decode(
 
 `ifdef FORMAL
     initial assume(~reset_n);
-    reg f_past_valid;
+    logic f_past_valid;
     initial f_past_valid = 0;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         f_past_valid = 1;
     end
 
     /* Validate Logic */
-    always @(*) begin
+    always_comb begin
         if (!invalid_opcode) begin
             assert((opcode_is_op + opcode_is_opimm + opcode_is_load + opcode_is_store + opcode_is_auipc +
                 opcode_is_branch + opcode_is_jal + opcode_is_jalr + opcode_is_lui + opcode_is_fence +
@@ -201,7 +187,7 @@ module instruction_decode(
     wire has_rd_stage = rd_rf_microcode[8];
     wire has_ex_stage = ex_alu_microcode[5] | ex_csr_microcode[15];
     wire has_ma_stage = ma_mem_microcode[4];
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (f_past_valid) begin
             if (!$past(reset_n)) begin
                 assert(!fault);

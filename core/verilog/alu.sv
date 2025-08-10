@@ -13,19 +13,15 @@ endfunction
  * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I/E instruction set.
  */
 module alu(
-    input clk, // Clock signal
-    input reset_n, // Reset signal (active low)
-    input available, // Operation available
-    input [4:0] op, // Operation to be performed
-    input [31:0] in_a, // Input data (bus A)
-    input [31:0] in_b, // Input data (bus B)
-    output [31:0] out, // Output data
-    output fault // Invalid operation
+    input logic clk, // Clock signal
+    input logic reset_n, // Reset signal (active low)
+    input logic available, // Operation available
+    input logic [4:0] op, // Operation to be performed
+    input logic [31:0] in_a, // Input data (bus A)
+    input logic [31:0] in_b, // Input data (bus B)
+    output logic [31:0] out, // Output data
+    output logic fault // Invalid operation
 );
-
-    /* Internal variables */
-    reg [31:0] out;
-    reg fault;
 
     /* Op decoding */
     wire op_is_add = (op == 5'b00000);
@@ -66,7 +62,7 @@ module alu(
     wire sign_cmp_result = (in_a[31] ^ op_branch_slt_is_unsigned) & ~(in_b[31] ^ op_branch_slt_is_unsigned);
     wire lt_ltu_result = sign_cmp_result | (~(in_a[31] ^ in_b[31]) & adder_sum[31] & ~eq_result);
     wire branch_slt_sltu_result = (op_is_branch_eq_ne ? eq_result : lt_ltu_result) ^ op_is_branch_gt;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (~reset_n) begin
             // Reset
             fault <= 0;
@@ -93,14 +89,14 @@ module alu(
 
 `ifdef FORMAL
     initial assume(~reset_n);
-    reg f_past_valid;
+    logic f_past_valid;
     initial f_past_valid = 0;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         f_past_valid = 1;
     end
 
     /* Validate logic */
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (f_past_valid) begin
             if ($past(~reset_n)) begin
                 assert(!fault);

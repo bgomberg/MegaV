@@ -15,32 +15,26 @@ endfunction
 `endif
 
 module memory(
-    input clk, // Clock signal
-    input reset_n, // Reset signal (active low)
-    input available, // Operation available
-    input is_write /* verilator public */, // Whether or not the operation is a write
-    input is_unsigned /* verilator public */, // Whether or not the read byte/half-word value should be zero-extended (vs. sign-extended)
-    input [1:0] op /* verilator public */, // Size of the operation (2'b00=byte, 2'b01=half-word, 2'b10=word)
-    input [31:0] addr /* verilator public */, // Address to access
-    input [31:0] in /* verilator public */, // Input data
-    output [31:0] out, // Output data
-    output op_fault, // Invalid op fault
-    output addr_fault, // Misaligned address fault
-    output access_fault // Access fault
+    input logic clk, // Clock signal
+    input logic reset_n, // Reset signal (active low)
+    input logic available, // Operation available
+    input logic is_write /* verilator public */, // Whether or not the operation is a write
+    input logic is_unsigned /* verilator public */, // Whether or not the read byte/half-word value should be zero-extended (vs. sign-extended)
+    input logic [1:0] op /* verilator public */, // Size of the operation (2'b00=byte, 2'b01=half-word, 2'b10=word)
+    input logic [31:0] addr /* verilator public */, // Address to access
+    input logic [31:0] in /* verilator public */, // Input data
+    output logic [31:0] out, // Output data
+    output logic op_fault, // Invalid op fault
+    output logic addr_fault, // Misaligned address fault
+    output logic access_fault // Access fault
 );
-
-    /* Outputs */
-    reg [31:0] out;
-    reg op_fault;
-    reg addr_fault;
-    reg access_fault;
 
     /* Basic Decode */
     wire op_is_invalid = op[1] & op[0];
     wire addr_is_misaligned = (op[1] & (addr[1] | addr[0])) | (op[0] & addr[0]);
 
     /* Memory Access */
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (~reset_n) begin
             out <= 32'b0;
             addr_fault <= 0;
@@ -62,14 +56,14 @@ module memory(
 
 `ifdef FORMAL
     initial assume(~reset_n);
-    reg f_past_valid;
+    logic f_past_valid;
     initial f_past_valid = 0;
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         f_past_valid <= 1;
     end
 
     /* Read path */
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (f_past_valid) begin
             if (available) begin
                 assume($stable(is_write));

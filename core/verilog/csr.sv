@@ -4,25 +4,19 @@
 module csr #(
     parameter [31:0] IRQ_HANDLER_ADDR = 32'h00000010
 ) (
-    input clk_i, // Clock signal
-    input reset_n_i, // Reset signal (active low)
-    input available_i, // Operation available
-    input is_write_stage_i, // Perform the write portion of the operation
-    input ext_int_i, // External interrupt
-    input [2:0] op_i, // (3'b000=Exception, 3'b001=MRET, 3'b011=Nop, 3'b101=CSRRW, 3'b110=CSRRS, 3'b111=CSRRC)
-    input [11:0] addr_exception_i, // Address / exception value
-    input [31:0] write_value_i, // Write value
-    output [31:0] read_value_o, // Read value
-    output ext_int_pending_o, // External interrupt pending
-    output sw_int_pending_o, // Software interrupt pending
-    output fault_o // Fault condition
+    input logic clk_i, // Clock signal
+    input logic reset_n_i, // Reset signal (active low)
+    input logic available_i, // Operation available
+    input logic is_write_stage_i, // Perform the write portion of the operation
+    input logic ext_int_i, // External interrupt
+    input logic [2:0] op_i, // (3'b000=Exception, 3'b001=MRET, 3'b011=Nop, 3'b101=CSRRW, 3'b110=CSRRS, 3'b111=CSRRC)
+    input logic [11:0] addr_exception_i, // Address / exception value
+    input logic [31:0] write_value_i, // Write value
+    output logic [31:0] read_value_o, // Read value
+    output logic ext_int_pending_o, // External interrupt pending
+    output logic sw_int_pending_o, // Software interrupt pending
+    output logic fault_o // Fault condition
 );
-
-    /* Outputs */
-    reg [31:0] read_value_o;
-    reg ext_int_pending_o;
-    reg sw_int_pending_o;
-    reg fault_o;
 
     /* Op decode */
     wire op_is_csr = op_i[2] & (op_i[1] | op_i[0]);
@@ -33,21 +27,21 @@ module csr #(
     wire op_is_nop = ~op_i[2] & op_i[1] & op_i[0];
 
     /* State */
-    reg interrupts_enabled;
-    reg prior_interrupts_enabled;
-    reg external_interrupt_enabled;
-    reg external_interrupt_pending;
-    reg software_interrupt_enabled;
-    reg software_interrupt_pending;
-    reg [31:0] exception_pc;
-    reg [3:0] exception_code;
-    reg trap_is_interrupt;
+    logic interrupts_enabled;
+    logic prior_interrupts_enabled;
+    logic external_interrupt_enabled;
+    logic external_interrupt_pending;
+    logic software_interrupt_enabled;
+    logic software_interrupt_pending;
+    logic [31:0] exception_pc;
+    logic [3:0] exception_code;
+    logic trap_is_interrupt;
 
     /* Logic */
     wire [31:0] write_value_or_mask = {32{~op_is_csr_rc}} & write_value_i;
     wire [31:0] write_value_and_mask = {32{~op_is_csr_rw}} & ~write_value_i;
-    reg temp_interrupts_enabled;
-    always @(posedge clk_i) begin
+    logic temp_interrupts_enabled;
+    always_ff @(posedge clk_i) begin
         if (~reset_n_i) begin
             ext_int_pending_o <= 0;
             sw_int_pending_o <= 0;
@@ -161,13 +155,13 @@ module csr #(
 
 `ifdef FORMAL
     initial assume(~reset_n_i);
-    reg f_past_valid;
+    logic f_past_valid;
     initial f_past_valid = 1'b0;
-    always @(posedge clk_i) begin
+    always_ff @(posedge clk_i) begin
         f_past_valid = 1;
     end
 
-    always @(posedge clk_i) begin
+    always_ff @(posedge clk_i) begin
         if (f_past_valid) begin
             if (!$past(reset_n_i)) begin
                 assert(!fault_o);

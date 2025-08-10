@@ -15,6 +15,8 @@ VERILOG_SRC_FILES := \
 	verilog/adder32.sv \
 	verilog/csr.sv \
 	verilog/fsm.sv
+VERILOG_DIRS := \
+	verilog/
 SIM_SRC_FILES := \
 	sim/sim_main.cpp \
 	sim/decode.cpp \
@@ -37,7 +39,7 @@ OUT_DIR := $(BUILD_DIR)/out
 RESULT_DIR := $(BUILD_DIR)/result
 GATES_PNG_OUT := $(OUT_DIR)/$(PROJECT_NAME).png
 GATES_JSON_OUT := $(OUT_DIR)/$(PROJECT_NAME).json
-SIM_EXE_OUT := $(OUT_DIR)/$(PROJECT_NAME).exe
+SIM_EXE_OUT := $(OUT_DIR)/$(PROJECT_NAME)
 SIM_TEST_PROG_OUT := $(OUT_DIR)/test_prog.bin
 
 # Project configuration
@@ -52,16 +54,16 @@ VERILATOR_ARGS := \
 	-Mdir $(OBJ_DIR) \
 	-Wall \
 	--prefix $(VERILATOR_MODULE_NAME) \
-	$(addprefix -I,$(dir $(VERILOG_SRC_FILES)))
+	$(addprefix -I,$(VERILOG_DIRS))
 
 # Executables
 DOT := dot
 VERILATOR := verilator
 SBY := sby
 YOSYS := yosys
-RISCV_CC := riscv-none-embed-gcc
-RISCV_LD := riscv-none-embed-ld
-RISCV_OBJCOPY := riscv-none-embed-objcopy
+RISCV_CC := /opt/riscv32e/bin/riscv32-unknown-elf-gcc
+RISCV_LD := /opt/riscv32e/bin/riscv32-unknown-elf-ld
+RISCV_OBJCOPY := /opt/riscv32e/bin/riscv32-unknown-elf-objcopy
 
 directories: $(OBJ_DIR) $(OUT_DIR) $(RESULT_DIR)
 $(OBJ_DIR):
@@ -98,10 +100,10 @@ $(GATES_PNG_OUT): $(OBJ_DIR)/$(PROJECT_NAME).gates.png
 build_sim: directories $(SIM_EXE_OUT) $(SIM_TEST_PROG_OUT)
 run_sim: build_sim
 	@$(SIM_EXE_OUT) $(SIM_TEST_PROG_OUT)
-$(SIM_EXE_OUT): $(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe
+$(SIM_EXE_OUT): $(OBJ_DIR)/$(VERILATOR_MODULE_NAME)
 	@echo "Copying output $(notdir $@)"
 	@cp $< $@
-$(OBJ_DIR)/$(VERILATOR_MODULE_NAME).exe: $(VERILOG_SRC_FILES) $(SIM_SRC_FILES) $(SIM_HEADER_FILES)
+$(OBJ_DIR)/$(VERILATOR_MODULE_NAME): $(VERILOG_SRC_FILES) $(SIM_SRC_FILES) $(SIM_HEADER_FILES)
 	@echo "Building $(notdir $@)"
 	@$(VERILATOR) $(VERILATOR_ARGS) $(TOP_VERILOG_SRC_FILE) $(abspath $(SIM_SRC_FILES))
 	@$(MAKE) -s -C $(OBJ_DIR)/ -f $(VERILATOR_MODULE_NAME).mk
@@ -110,10 +112,10 @@ $(SIM_TEST_PROG_OUT): $(OBJ_DIR)/test_prog.elf
 	@$(RISCV_OBJCOPY) -O binary $< $@
 $(OBJ_DIR)/test_prog.elf: $(OBJ_DIR)/test_prog.o sim/link.ld
 	@echo "Linking $(notdir $@)"
-	@$(RISCV_LD) -T sim/link.ld -nostartfiles $< -o $@
+	@$(RISCV_LD) -T sim/link.ld $< -o $@
 $(OBJ_DIR)/test_prog.o: $(SIM_TEST_PROG_SRC_FILE)
 	@echo "Compiling $(notdir $@)"
-	@$(RISCV_CC) -march=rv32e -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles $^ -o $@
+	@$(RISCV_CC) -march=rv32e_zicsr_zifencei -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles $^ -o $@
 
 COMPLIANCE_SRCS := $(wildcard $(SIM_COMPLIANCE_SRC_DIR)/*)
 COMPLIANCE_BINS := $(addprefix $(OBJ_DIR)/,$(notdir $(COMPLIANCE_SRCS:.S=.bin)))
@@ -127,10 +129,10 @@ $(OBJ_DIR)/%.bin: $(OBJ_DIR)/%.elf
 	@$(RISCV_OBJCOPY) -O binary $< $@
 $(OBJ_DIR)/%.elf: $(OBJ_DIR)/%.o sim/link.ld
 	@echo "Linking $(notdir $@)"
-	@$(RISCV_LD) -T sim/link.ld -nostartfiles $< -o $@
+	@$(RISCV_LD) -T sim/link.ld $< -o $@
 $(OBJ_DIR)/%.o: $(SIM_COMPLIANCE_SRC_DIR)/%.S $(wildcard $(SIM_COMPLIANCE_INC_DIR)/*)
 	@echo "Compiling $(notdir $@)"
-	@$(RISCV_CC) -march=rv32e -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles -I$(SIM_COMPLIANCE_INC_DIR) $< -o $@
+	@$(RISCV_CC) -march=rv32e_zicsr_zifencei -c -mabi=ilp32e -nostdlib -nodefaultlibs -nostartfiles -I$(SIM_COMPLIANCE_INC_DIR) $< -o $@
 
 SBY_MODULES := \
 	program_counter \
