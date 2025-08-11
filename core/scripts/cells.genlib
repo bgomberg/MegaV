@@ -1,12 +1,49 @@
-GATE ZERO	1 Y=CONST0;
-GATE ONE	1 Y=CONST1;
-GATE BUF  1 Y=A;                  PIN * NONINV  1 999 1 0 1 0
-GATE NOT  2 Y=!A;                 PIN * UNKNOWN 1 999 1 0 1 0
-GATE MUX2 2 Y=(A*B)+(S*B)+(!S*A); PIN * UNKNOWN 1 999 1 0 1 0
-GATE AND  2 Y=A*B;                PIN * NONINV  1 999 1 0 1 0
-GATE OR   2 Y=A+B;                PIN * NONINV  1 999 1 0 1 0
-GATE XOR  2 Y=(A*!B)+(!A*B);      PIN * UNKNOWN 1 999 1 0 1 0
-GATE AND3 2 Y=A*B*C;              PIN * NONINV  1 999 1 0 1 0
-GATE OR3  2 Y=A+B+C;              PIN * NONINV  1 999 1 0 1 0
-GATE AND4 2 Y=A*B*C*D;            PIN * NONINV  1 999 1 0 1 0
-GATE OR4  2 Y=A+B+C+D;            PIN * NONINV  1 999 1 0 1 0
+GATE ZERO       1 Y=CONST0;
+GATE ONE        1 Y=CONST1;
+GATE BUF        1 Y=A;                  PIN * NONINV    1 999 1 0 1 0
+GATE NOT        2 Y=!A;                 PIN * INV       1 999 1 0 1 0
+GATE MUX2       2 Y=(A*B)+(S*B)+(!S*A); PIN * UNKNOWN   1 999 1 0 1 0
+GATE AND        2 Y=A*B;                PIN * NONINV    1 999 1 0 1 0
+GATE OR         2 Y=A+B;                PIN * NONINV    1 999 1 0 1 0
+GATE NAND       2 Y=!(A*B);             PIN * NONINV    1 999 1 0 1 0
+GATE NOR        2 Y=!(A+B);             PIN * NONINV    1 999 1 0 1 0
+GATE XOR        2 Y=(A*!B)+(!A*B);      PIN * UNKNOWN   1 999 1 0 1 0
+GATE AND3       2 Y=A*B*C;              PIN * NONINV    1 999 1 0 1 0
+GATE OR3        2 Y=A+B+C;              PIN * NONINV    1 999 1 0 1 0
+GATE NAND3      2 Y=!(A*B*C);           PIN * NONINV    1 999 1 0 1 0
+GATE NOR3       2 Y=!(A+B+C);           PIN * NONINV    1 999 1 0 1 0
+GATE AND4       2 Y=A*B*C*D;            PIN * NONINV    1 999 1 0 1 0
+GATE OR4        2 Y=A+B+C+D;            PIN * NONINV    1 999 1 0 1 0
+GATE NAND4      2 Y=!(A*B*C*D);         PIN * NONINV    1 999 1 0 1 0
+GATE NOR4       2 Y=!(A+B+C+D);         PIN * NONINV    1 999 1 0 1 0
+GATE D_FF       2 Y=Q;
+    PIN D       NONINV  1 999 1 0 1 0
+    PIN CLK     NONINV  1 999 1 0 1 0
+    PIN Q       NONINV  1 999 1 0 1 0
+GATE D_FF_S     2 Y=Q;
+    PIN D       NONINV  1 999 1 0 1 0
+    PIN CLK     NONINV  1 999 1 0 1 0
+    PIN PREn    INV     1 999 1 0 1 0
+    PIN Q       NONINV  1 999 1 0 1 0
+GATE D_FF_R     2 Y=Q;
+    PIN D       NONINV  1 999 1 0 1 0
+    PIN CLK     NONINV  1 999 1 0 1 0
+    PIN CLRn    INV     1 999 1 0 1 0
+    PIN Q       NONINV  1 999 1 0 1 0
+GATE D_FF_SR    2 Y=Q;
+    PIN D       NONINV  1 999 1 0 1 0
+    PIN CLK     NONINV  1 999 1 0 1 0
+    PIN PREn    INV     1 999 1 0 1 0
+    PIN CLRn    INV     1 999 1 0 1 0
+    PIN Q       NONINV  1 999 1 0 1 0
+GATE JK_FF      2 Y=Q;
+    PIN J       NONINV  1 999 1 0 1 0
+    PIN K       NONINV  1 999 1 0 1 0
+    PIN CLK     NONINV  1 999 1 0 1 0
+    PIN Q       NONINV  1 999 1 0 1 0
+GATE JK_FF_C    2 Y=Q;
+    PIN J       NONINV  1 999 1 0 1 0
+    PIN K       NONINV  1 999 1 0 1 0
+    PIN CLK     NONINV  1 999 1 0 1 0
+    PIN CLRn    INV     1 999 1 0 1 0
+    PIN Q       NONINV  1 999 1 0 1 0

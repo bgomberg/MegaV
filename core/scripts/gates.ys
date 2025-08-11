@@ -1,4 +1,4 @@
-read_verilog -lib scripts/cells.v
+read_verilog -lib scripts/cells.v -sv
 
 # Split up nets into individual bits
 splitnets -ports; opt

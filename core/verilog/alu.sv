@@ -38,12 +38,12 @@ module alu(
     wire [31:0] and_result = in_a & in_b;
 
     /* Adder */
-    wire [31:0] adder_b = in_b ^ {32{~op_is_add}};
+    wire [31:0] adder_in_b = in_b ^ {32{~op_is_add}};
     wire adder_carry_in = ~op_is_add;
     wire [31:0] adder_sum;
     adder32 adder_module(
-        in_a ^ adder_b,
-        in_a & adder_b,
+        in_a,
+        adder_in_b,
         adder_carry_in,
         adder_sum);
 

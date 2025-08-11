@@ -44,7 +44,7 @@ module fsm(
     wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
     always_ff @(posedge clk) begin
         fault_num <= active_fault ? active_fault_num : fault_num;
-            fault <= fault_value;
+        fault <= fault_value;
         if (~reset_n) begin
             in_progress <= 0;
             stage_active <= 1 << `STAGE_CONTROL;

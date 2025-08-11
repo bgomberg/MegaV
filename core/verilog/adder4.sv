@@ -2,13 +2,15 @@
  * A 4 bit full adder.
  */
 module adder4(
-    input [3:0] prop, // Propagate signal (a ^ b)
-    input [3:0] gen, // Generate signal (a & b)
+    input [3:0] a, // Input A
+    input [3:0] b, // Input B
     input carry_in, // Carry in
     output [3:0] sum, // Result
     output carry_out // Carry out
 );
 
+    wire [3:0] prop = a ^ b;
+    wire [3:0] gen = a & b;
     wire all_prop = prop[0] & prop[1] & prop[2] & prop[3];
 
     wire carry_0 = (prop[0] & carry_in) | (gen[0]);
@@ -25,12 +27,8 @@ module adder4(
 
 `ifdef FORMAL
     /* Validate logic */
-    (* anyconst *) wire [3:0] f_a;
-    (* anyconst *) wire [3:0] f_b;
     always_comb begin
-        assume(prop == (f_a ^ f_b));
-        assume(gen == (f_a & f_b));
-        assert(sum == (f_a + f_b + carry_in));
+        assert(sum == (a + b + carry_in));
     end
 `endif
 

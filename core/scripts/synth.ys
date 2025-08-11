@@ -1,14 +1,24 @@
-# check design hierarchy
+read_liberty -lib scripts/cells.lib
+
+# Check design hierarchy
 hierarchy
 
-# translate processes (always blocks)
+# Translate processes (always blocks)
 proc; opt
 
-# detect and optimize FSM encodings
+# Detect and optimize FSM encodings
 fsm; opt
 
-# implement memories (arrays)
+# Implement memories (arrays)
 memory; opt
 
-# convert to gate logic
+# Convert to gate logic
 techmap; opt
+
+# Map flip-flops
+dfflibmap -liberty scripts/cells.lib; opt
+
+# Optimize with our library
+abc -liberty scripts/cells.lib; opt
+
+opt_clean
