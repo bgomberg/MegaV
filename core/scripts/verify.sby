@@ -8,9 +8,22 @@ smtbmc yices
 [script]
 --pycode-begin--
 early_log(workdir, "Verifying module: {}".format(taskname))
-output("read -formal {}.sv".format(taskname))
+output("read -formal -sv {}.sv".format(taskname))
 output("prep -top {}".format(taskname))
 --pycode-end--
+
+[tasks]
+core
+program_counter
+memory
+instruction_decode
+register_file
+alu
+adder4
+adder32
+shifter
+csr
+fsm
 
 [files]
 verilog/core.sv
@@ -21,5 +34,6 @@ verilog/register_file.sv
 verilog/alu.sv
 verilog/adder4.sv
 verilog/adder32.sv
+verilog/shifter.sv
 verilog/csr.sv
 verilog/fsm.sv

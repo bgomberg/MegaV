@@ -13,6 +13,7 @@ VERILOG_SRC_FILES := \
 	verilog/alu.sv \
 	verilog/adder4.sv \
 	verilog/adder32.sv \
+	verilog/shifter.sv \
 	verilog/csr.sv \
 	verilog/fsm.sv
 

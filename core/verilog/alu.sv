@@ -1,13 +1,5 @@
 `include "adder32.sv"
-
-function [31:0] reverse_bit_order(input [31:0] data);
-integer i;
-begin
-    for (i = 0; i < 32; i = i + 1) begin
-        reverse_bit_order[31-i] = data[i];
-    end
-end
-endfunction
+`include "shifter.sv"
 
 /*
  * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I/E instruction set.
@@ -45,17 +37,18 @@ module alu(
         in_a,
         adder_in_b,
         adder_carry_in,
-        adder_sum);
+        adder_sum
+    );
 
-    /* Shifters */
-    wire shift_in_bit = op_shift_is_right_arithmetic & in_a[31];
-    wire [31:0] shift_in = op_shift_is_right ? reverse_bit_order(in_a) : in_a;
-    wire [31:0] shift_int_1 = in_b[4] ? {shift_in[15:0], {16{shift_in_bit}}} : shift_in;
-    wire [31:0] shift_int_2 = in_b[3] ? {shift_int_1[23:0], {8{shift_in_bit}}} : shift_int_1;
-    wire [31:0] shift_int_3 = in_b[2] ? {shift_int_2[27:0], {4{shift_in_bit}}} : shift_int_2;
-    wire [31:0] shift_int_4 = in_b[1] ? {shift_int_3[29:0], {2{shift_in_bit}}} : shift_int_3;
-    wire [31:0] shift_int_5 = in_b[0] ? {shift_int_4[30:0], shift_in_bit} : shift_int_4;
-    wire [31:0] shift_result = op_shift_is_right ? reverse_bit_order(shift_int_5) : shift_int_5;
+    /* Shifter */
+    wire [31:0] shift_result;
+    shifter shifter_module(
+        in_a,
+        in_b[4:0],
+        op_shift_is_right,
+        op_shift_is_right_arithmetic,
+        shift_result
+    );
 
     /* Logic */
     wire eq_result = (xor_result == 32'b0);
@@ -141,7 +134,7 @@ module alu(
                     end
                     5'b01101: begin // SRA
                         assert(!fault);
-                        assert(out == ($past(in_a) >>> $past(in_b[4:0])));
+                        assert($signed(out) == ($signed($past(in_a)) >>> $past(in_b[4:0])));
                     end
                     5'b10000: begin // BEQ
                         assert(!fault);
