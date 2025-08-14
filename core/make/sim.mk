@@ -26,7 +26,8 @@ VERILATOR_ARGS := \
 	-Mdir $(SIM_OBJ_DIR) \
 	-Wall \
 	--prefix $(VERILATOR_MODULE_NAME) \
-	-I$(dir $(TOP_VERILOG_SRC_FILE))
+	-Iverilog \
+	-Iverilog/cells
 
 COMPLIANCE_SRC_DIR := sim/compliance/src
 COMPLIANCE_SRCS := $(wildcard $(COMPLIANCE_SRC_DIR)/*)

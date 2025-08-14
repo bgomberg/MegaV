@@ -165,19 +165,4 @@ library(cells) {
 		pin(Q) { direction: output; function: "Q"; }
 		pin(Qn) { direction: output; function: "Q'"; }
 	}
-	cell(JK_FF_SR) { /* 74HCT109PW (N=2, pd=18ns, TSSOP16) */
-		area: 2;
-		ff("Q") {
-			next_state: "((J*Q')+(K'*Q))";
-			clocked_on: "CLK";
-			preset: "PREn";
-			clear: "CLRn";
-		}
-		pin(J) { direction: input; }
-		pin(K) { direction: input; }
-		pin(CLK) { direction: input; }
-		pin(PREn) { direction: input; }
-		pin(CLRn) { direction: input; }
-		pin(Q) { direction: output; function: "Q"; }
-	}
 }

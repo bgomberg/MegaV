@@ -14,16 +14,16 @@ VERILOG_SRC_FILES := \
 	verilog/adder4.sv \
 	verilog/adder32.sv \
 	verilog/shifter.sv \
-	verilog/mux2.sv \
-	verilog/mux2_2.sv \
-	verilog/mux2_3.sv \
-	verilog/mux2_4.sv \
-	verilog/mux2_stages.sv \
-	verilog/dff.sv \
-	verilog/dff_2.sv \
-	verilog/dff_3.sv \
-	verilog/dff_8.sv \
-	verilog/dff_stages.sv \
+	verilog/cells/mux2.sv \
+	verilog/cells/mux2_2.sv \
+	verilog/cells/mux2_3.sv \
+	verilog/cells/mux2_4.sv \
+	verilog/cells/mux2_stages.sv \
+	verilog/cells/dff.sv \
+	verilog/cells/dff_2.sv \
+	verilog/cells/dff_3.sv \
+	verilog/cells/dff_8.sv \
+	verilog/cells/dff_stages.sv \
 	verilog/csr.sv \
 	verilog/fsm.sv \
 	verilog/stages.sv

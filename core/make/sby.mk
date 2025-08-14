@@ -19,9 +19,14 @@ SBY_CONFIG_FILE := scripts/verify.sby
 $(SBY_OBJ_DIR):
 	@mkdir -p $@
 
+$(SBY_OBJ_DIR)/%.pass: verilog/cells/%.sv | $(SBY_OBJ_DIR)
+	@$(SBY) -d $(SBY_OBJ_DIR)/$(basename $(notdir $@)) -f $(SBY_CONFIG_FILE) $(basename $(notdir $@))
+	@cp $(SBY_OBJ_DIR)/$(basename $(notdir $@))/PASS $@
+
 $(SBY_OBJ_DIR)/%.pass: verilog/%.sv | $(SBY_OBJ_DIR)
 	@$(SBY) -d $(SBY_OBJ_DIR)/$(basename $(notdir $@)) -f $(SBY_CONFIG_FILE) $(basename $(notdir $@))
 	@cp $(SBY_OBJ_DIR)/$(basename $(notdir $@))/PASS $@
+
 sby: $(SBY_RESULTS)
 
 .PHONY: sby

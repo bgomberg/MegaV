@@ -1,11 +1,11 @@
 `include "stages.sv"
-`include "dff.sv"
-`include "dff_2.sv"
-`include "dff_3.sv"
-`include "dff_stages.sv"
-`include "mux2_2.sv"
-`include "mux2_3.sv"
-`include "mux2_stages.sv"
+`include "cells/dff.sv"
+`include "cells/dff_2.sv"
+`include "cells/dff_3.sv"
+`include "cells/dff_stages.sv"
+`include "cells/mux2_2.sv"
+`include "cells/mux2_3.sv"
+`include "cells/mux2_stages.sv"
 
 /*
  * FSM.

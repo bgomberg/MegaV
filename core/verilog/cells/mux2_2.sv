@@ -1,7 +1,6 @@
 `ifndef __MUX2_2_SV__
 `define __MUX2_2_SV__
 
-
 `include "mux2.sv"
 
 module mux2_2(

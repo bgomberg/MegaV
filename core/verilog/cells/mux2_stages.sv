@@ -1,7 +1,7 @@
 `ifndef __MUX2_STAGES_SV__
 `define __MUX2_STAGES_SV__
 
-`include "stages.sv"
+`include "../stages.sv"
 `include "mux2.sv"
 
 module mux2_stages(
