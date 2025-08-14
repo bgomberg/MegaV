@@ -1,5 +1,19 @@
-import sys
+import os
 import re
+import sys
+
+def filter_graph_lines(lines: list[str], module_name: str) -> list[str]:
+    new_lines = []
+    found_module = False
+    for line in lines:
+        if line.strip() == "digraph \"" + module_name + "\" {":
+            assert not found_module
+            found_module = True
+        if found_module:
+            new_lines.append(line)
+        if line.strip() == "}":
+            found_module = False
+    return new_lines
 
 def main(lines: list[str], target_signal: str) -> list[str]:
     node_pattern = re.compile(r'^\s*(\S*)\s*\[(.*label="%s".*)\];' % re.escape(target_signal))
@@ -47,6 +61,10 @@ if __name__ == "__main__":
     with open(dot_path, 'r') as f:
         dot = f.read()
     lines = dot.splitlines()
+
+    # Keep just the graph for the top-level module
+    module_name = os.path.splitext(os.path.basename(dot_path))[0]
+    lines = filter_graph_lines(lines, module_name)
 
     lines = main(lines, "clk")
     lines = main(lines, "reset_n")

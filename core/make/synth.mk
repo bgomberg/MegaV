@@ -22,4 +22,4 @@ $(BUILD_DIR)/%.png: $(SYNTH_DIR)/%.dot | $(BUILD_DIR)
 	@echo "Building $(notdir $@)"
 	@$(DOT) -Tpng $< -o $@ >/dev/null
 
-.PRECIOUS: $(SYNTH_DIR)/%.rtlil
+.PRECIOUS: $(SYNTH_DIR)/%.rtlil $(SYNTH_DIR)/%.dot $(SYNTH_DIR)/%.synth.ys

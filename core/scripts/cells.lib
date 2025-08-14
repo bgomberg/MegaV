@@ -1,14 +1,15 @@
 library(cells) {
-	cell(BUF) {
-		area: 1;
+	cell(BUF) { /* 74LVC1G34GW (N=1, pd=2.0ns, TSSOP5) */
+		area: 2;
 		pin(A) { direction: input; }
 		pin(Y) { direction: output; function: "A"; }
 	}
-	cell(NOT) {
-		area: 1;
+	cell(NOT) { /* 74LVC1G240GW (N=1, pd=1.9ns, TSSOP5) */
+		area: 2;
 		pin(A) { direction: input; }
 		pin(Y) { direction: output; function: "A'"; }
 	}
+	/* 74LVC1G157GW (N=1, pd=2.7ns, TSSOP6) */
 	cell(MUX2) {
 		area: 2;
 		pin(A) { direction: input; }
@@ -16,65 +17,100 @@ library(cells) {
 		pin(S) { direction: input; }
 		pin(Y) { direction: output; function: "(A*B)+(S*B)+(S'*A)"; }
 	}
-	cell(XOR) {
+	cell(MUX2_3) { /* 74LVC157APW (N=1, pd=2.7ns, TSSOP16) */
+		area: 2;
+		pin(A1) { direction: input; }
+		pin(B1) { direction: input; }
+		pin(A2) { direction: input; }
+		pin(B2) { direction: input; }
+		pin(A3) { direction: input; }
+		pin(B3) { direction: input; }
+		pin(S) { direction: input; }
+		pin(Y1) { direction: output; function: "(A1*B1)+(S*B1)+(S'*A1)"; }
+		pin(Y2) { direction: output; function: "(A2*B2)+(S*B2)+(S'*A2)"; }
+		pin(Y3) { direction: output; function: "(A3*B3)+(S*B3)+(S'*A3)"; }
+	}
+	cell(MUX2_4) { /* 74LVC157APW (N=1, pd=2.7ns, TSSOP16) */
+		area: 2;
+		pin(A1) { direction: input; }
+		pin(B1) { direction: input; }
+		pin(A2) { direction: input; }
+		pin(B2) { direction: input; }
+		pin(A3) { direction: input; }
+		pin(B3) { direction: input; }
+		pin(A4) { direction: input; }
+		pin(B4) { direction: input; }
+		pin(S) { direction: input; }
+		pin(Y1) { direction: output; function: "(A1*B1)+(S*B1)+(S'*A1)"; }
+		pin(Y2) { direction: output; function: "(A2*B2)+(S*B2)+(S'*A2)"; }
+		pin(Y3) { direction: output; function: "(A3*B3)+(S*B3)+(S'*A3)"; }
+		pin(Y4) { direction: output; function: "(A4*B4)+(S*B4)+(S'*A4)"; }
+	}
+	cell(XOR) { /* 74LVC1G86GW (N=1, pd=2.3ns, TSSOP5) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(Y) { direction: output; function: "(A*B')+(A'*B)"; }
 	}
-	cell(AND) {
+	cell(AND) { /* 74LVC1G08GW (N=1, pd=2.1ns, TSSOP5) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(Y) { direction: output; function: "(A*B)"; }
 	}
-	cell(OR) {
+	cell(OR) { /* 74LVC1G32GW (N=1, pd=2.1ns, TSSOP5) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(Y) { direction: output; function: "(A+B)"; }
 	}
-	cell(NAND) {
+	cell(XNOR) { /* 74AUP1T87GW (N=1, pd=2.8ns, TSSOP5) */
+		area: 2;
+		pin(A) { direction: input; }
+		pin(B) { direction: input; }
+		pin(Y) { direction: output; function: "((A*B')+(A'*B))'"; }
+	}
+	cell(NAND) { /* 74LVC1G00GW (N=4, pd=2.2ns, TSSOP5) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(Y) { direction: output; function: "(A*B)'"; }
 	}
-	cell(NOR) {
+	cell(NOR) { /* 74LVC1G02GW (N=1, pd=2.1ns, TSSOP5) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(Y) { direction: output; function: "(A+B)'"; }
 	}
-	cell(AND3) {
+	cell(AND3) { /* 74LVC1G11GW (N=1, pd=2.6ns, TSSOP6) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(C) { direction: input; }
 		pin(Y) { direction: output; function: "(A*B*C)"; }
 	}
-	cell(OR3) {
+	cell(OR3) { /* 74LVC1G332GW (N=1, pd=2.6ns, TSSOP6) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(C) { direction: input; }
 		pin(Y) { direction: output; function: "(A+B+C)"; }
 	}
-	cell(NAND3) {
+	cell(NAND3) { /* 74LVC1G10GW (N=1, pd=2.6ns, TSSOP6) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(C) { direction: input; }
 		pin(Y) { direction: output; function: "(A*B*C)'"; }
 	}
-	cell(NOR3) {
+	cell(NOR3) { /* 74LVC1G27GW (N=1, pd=2.6ns, TSSOP6) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(C) { direction: input; }
 		pin(Y) { direction: output; function: "(A+B+C)'"; }
 	}
-	cell(AND4) {
+	cell(AND4) { /* 74HCS21PW (N=2, pd=10ns, TSSOP14) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
@@ -82,7 +118,7 @@ library(cells) {
 		pin(D) { direction: input; }
 		pin(Y) { direction: output; function: "(A*B*C*D)"; }
 	}
-	cell(OR4) {
+	cell(OR4) { /* 74LVC32APW (N=1*, pd=5ns, TSSOP14, daisy-chained)
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
@@ -90,7 +126,7 @@ library(cells) {
 		pin(D) { direction: input; }
 		pin(Y) { direction: output; function: "(A+B+C+D)"; }
 	}
-	cell(NAND4) {
+	cell(NAND4) { /* 74HCS20PW (N=2, pd=10ns, TSSOP14) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
@@ -98,7 +134,7 @@ library(cells) {
 		pin(D) { direction: input; }
 		pin(Y) { direction: output; function: "(A*B*C*D)'"; }
 	}
-	cell(NOR4) {
+	cell(NOR4) { /* 74HC4002PW (N=2, pd=11ns, TSSOP14) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
@@ -106,7 +142,7 @@ library(cells) {
 		pin(D) { direction: input; }
 		pin(Y) { direction: output; function: "(A+B+C+D)'"; }
 	}
-	cell(D_FF) {
+	cell(D_FF) { /* 74LVC1G79GW (N=1, pd=2.2ns, TSSOP5) */
 		area: 2;
 		ff("Q") {
 			next_state: "(D)";
@@ -116,19 +152,7 @@ library(cells) {
 		pin(CLK) { direction: input; }
 		pin(Q) { direction: output; function: "Q"; }
 	}
-	cell(D_FF_S) {
-		area: 2;
-		ff("Q") {
-			next_state: "(D)";
-			clocked_on: "CLK";
-			preset: "PREn";
-		}
-		pin(D) { direction: input; }
-		pin(CLK) { direction: input; }
-		pin(PREn) { direction: input; }
-		pin(Q) { direction: output; function: "Q"; }
-	}
-	cell(D_FF_R) {
+	cell(D_FF_R) { /* 74LVC1G175GW (N=1, pd=3.1ns, TSSOP6) */
 		area: 2;
 		ff("Q") {
 			next_state: "(D)";
@@ -140,7 +164,7 @@ library(cells) {
 		pin(CLRn) { direction: input; }
 		pin(Q) { direction: output; function: "Q"; }
 	}
-	cell(D_FF_SR) {
+	cell(D_FF_SR) { /* 74LVC1G74DP (N=1, pd=3.5ns, TSSOP8) */
 		area: 2;
 		ff("Q") {
 			next_state: "(D)";
@@ -153,28 +177,20 @@ library(cells) {
 		pin(PREn) { direction: input; }
 		pin(CLRn) { direction: input; }
 		pin(Q) { direction: output; function: "Q"; }
+		pin(Qn) { direction: output; function: "Q'"; }
 	}
-	cell(JK_FF) {
+	cell(JK_FF_SR) { /* 74HCT109PW (N=2, pd=18ns, TSSOP16) */
 		area: 2;
 		ff("Q") {
 			next_state: "((J*Q')+(K'*Q))";
 			clocked_on: "CLK";
-		}
-		pin(J) { direction: input; }
-		pin(K) { direction: input; }
-		pin(CLK) { direction: input; }
-		pin(Q) { direction: output; function: "Q"; }
-	}
-	cell(JK_FF_C) {
-		area: 2;
-		ff("Q") {
-			next_state: "((J*Q')+(K'*Q))";
-			clocked_on: "CLK";
+			preset: "PREn";
 			clear: "CLRn";
 		}
 		pin(J) { direction: input; }
 		pin(K) { direction: input; }
 		pin(CLK) { direction: input; }
+		pin(PREn) { direction: input; }
 		pin(CLRn) { direction: input; }
 		pin(Q) { direction: output; function: "Q"; }
 	}
