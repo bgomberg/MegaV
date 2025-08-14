@@ -1,0 +1,31 @@
+`ifndef __MUX2_SV__
+`define __MUX2_SV__
+
+/*
+ * A 2:1 MUX.
+ */
+module mux2 #(
+    parameter DATA_WIDTH = 1
+) (
+    input [DATA_WIDTH-1:0] a, // Input A
+    input [DATA_WIDTH-1:0] b, // Input B
+    input select, // Select
+    output [DATA_WIDTH-1:0] out // Output
+);
+
+    assign out = select ? b : a;
+
+`ifdef FORMAL
+    /* Validate logic */
+    always_comb begin
+        if (select) begin
+            assert(out == b);
+        end else begin
+            assert(out == a);
+        end
+    end
+`endif
+
+endmodule
+
+`endif

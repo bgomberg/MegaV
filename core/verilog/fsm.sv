@@ -1,12 +1,11 @@
-`define STAGE_CONTROL 0
-`define STAGE_FETCH 1
-`define STAGE_DECODE 2
-`define STAGE_READ 3
-`define STAGE_EXECUTE 4
-`define STAGE_MEMORY 5
-`define STAGE_WRITE_BACK 6
-`define STAGE_UPDATE_PC 7
-`define NUM_STAGES 8
+`include "stages.sv"
+`include "dff.sv"
+`include "dff_2.sv"
+`include "dff_3.sv"
+`include "dff_stages.sv"
+`include "mux2_2.sv"
+`include "mux2_3.sv"
+`include "mux2_stages.sv"
 
 /*
  * FSM.
@@ -25,44 +24,95 @@ module fsm(
     output logic [2:0] fault_num // Active fault number
 );
 
-    /* Logic */
-    logic fault;
-    logic in_progress;
+    /* Next Stage */
     wire [`NUM_STAGES-1:0] next_stage = {stage_active[`NUM_STAGES-2:0], stage_active[`NUM_STAGES-1]};
-    wire current_stage_done = in_progress;
+
+    /* In Progress */
+    logic in_progress;
+    dff in_progress_dff(
+        .clk(clk),
+        .clear_n(reset_n),
+        .in(~in_progress),
+        .out(in_progress)
+    );
+
+    /* Control Op */
+    wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
+    wire update_control_op = ~reset_n | (in_progress & (next_stage[`STAGE_CONTROL] | active_fault));
+    wire [1:0] next_control_op;
+    mux2_2 control_op_mux(
+        .a(control_op),
+        .b(control_op_value),
+        .select(update_control_op),
+        .out(next_control_op)
+    );
+    dff_2 control_op_dff(
+        .clk(clk),
+        .clear_n(reset_n),
+        .in(next_control_op),
+        .out(control_op)
+    );
+
+    /* Fault / Fault Number */
+    logic fault;
     wire mem_fault = mem_addr_fault | mem_access_fault;
     wire fetch_stage_mem_fault = mem_fault & stage_active[`STAGE_FETCH];
     wire mem_stage_mem_fault = mem_fault & stage_active[`STAGE_MEMORY];
     wire non_control_stage_instr_fault = ~stage_active[`STAGE_CONTROL] & illegal_instr_fault;
-    wire active_fault = current_stage_done & (fetch_stage_mem_fault | mem_stage_mem_fault | non_control_stage_instr_fault);
+    wire active_fault = in_progress & (fetch_stage_mem_fault | mem_stage_mem_fault | non_control_stage_instr_fault);
     wire [2:0] active_fault_num = {
         mem_stage_mem_fault & ~non_control_stage_instr_fault,
         (mem_stage_mem_fault & mem_fault_is_store) | non_control_stage_instr_fault,
         ~non_control_stage_instr_fault & ~mem_addr_fault & mem_access_fault
     };
-    wire fault_value = reset_n & (current_stage_done ? active_fault : fault);
-    wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
-    always_ff @(posedge clk) begin
-        fault_num <= active_fault ? active_fault_num : fault_num;
-        fault <= fault_value;
-        if (~reset_n) begin
-            in_progress <= 0;
-            stage_active <= 1 << `STAGE_CONTROL;
-            control_op <= control_op_value;
-        end else begin
-            in_progress <= ~current_stage_done;
-            if (current_stage_done) begin
-                stage_active <= next_stage;
-                if (next_stage[`STAGE_CONTROL]) begin
-                    control_op <= control_op_value;
-                end
-            end
-            if (active_fault) begin
-                stage_active <= 1 << `STAGE_CONTROL;
-                control_op <= control_op_value;
-            end
-        end
-    end
+    wire fault_value;
+    mux2 fault_value_mux(
+        .a(fault),
+        .b(active_fault),
+        .select(in_progress),
+        .out(fault_value)
+    );
+    dff fault_dff(
+        .clk(clk),
+        .clear_n(reset_n),
+        .in(fault_value),
+        .out(fault)
+    );
+    wire [2:0] next_fault_num;
+    mux2_3 fault_num_mux(
+        .a(fault_num),
+        .b(active_fault_num),
+        .select(active_fault),
+        .out(next_fault_num)
+    );
+    dff_3 fault_num_dff(
+        .clk(clk),
+        .clear_n(reset_n),
+        .in(next_fault_num),
+        .out(fault_num)
+    );
+
+    /* Active Stage */
+    wire [`NUM_STAGES-1:0] next_stage_active;
+    wire [`NUM_STAGES-1:0] next_stage_active_intermediate;
+    mux2_stages next_stage_active_intermediate_mux(
+        .a(next_stage),
+        .b(`DEFAULT_STAGE_ACTIVE),
+        .select(active_fault),
+        .out(next_stage_active_intermediate)
+    );
+    mux2_stages next_stage_active_mux(
+        .a(stage_active),
+        .b(next_stage_active_intermediate),
+        .select(in_progress),
+        .out(next_stage_active)
+    );
+    dff_stages stage_active_dff(
+        .clk(clk),
+        .clear_n(reset_n),
+        .in(next_stage_active),
+        .out(stage_active)
+    );
 
 `ifdef FORMAL
     initial assume(~reset_n);

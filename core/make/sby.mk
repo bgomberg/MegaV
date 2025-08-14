@@ -9,7 +9,9 @@ SBY_MODULES := \
 	fsm \
 	adder4 \
 	adder32 \
-	shifter
+	shifter \
+	mux2 \
+	dff
 SBY_OBJ_DIR = $(BUILD_DIR)/sby
 SBY_RESULTS := $(addprefix $(SBY_OBJ_DIR)/,$(SBY_MODULES:=.pass))
 SBY_CONFIG_FILE := scripts/verify.sby

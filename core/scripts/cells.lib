@@ -9,26 +9,12 @@ library(cells) {
 		pin(A) { direction: input; }
 		pin(Y) { direction: output; function: "A'"; }
 	}
-	/* 74LVC1G157GW (N=1, pd=2.7ns, TSSOP6) */
-	cell(MUX2) {
+	cell(MUX2) { /* 74LVC1G157GW (N=1, pd=2.7ns, TSSOP6) */
 		area: 2;
 		pin(A) { direction: input; }
 		pin(B) { direction: input; }
 		pin(S) { direction: input; }
 		pin(Y) { direction: output; function: "(A*B)+(S*B)+(S'*A)"; }
-	}
-	cell(MUX2_3) { /* 74LVC157APW (N=1, pd=2.7ns, TSSOP16) */
-		area: 2;
-		pin(A1) { direction: input; }
-		pin(B1) { direction: input; }
-		pin(A2) { direction: input; }
-		pin(B2) { direction: input; }
-		pin(A3) { direction: input; }
-		pin(B3) { direction: input; }
-		pin(S) { direction: input; }
-		pin(Y1) { direction: output; function: "(A1*B1)+(S*B1)+(S'*A1)"; }
-		pin(Y2) { direction: output; function: "(A2*B2)+(S*B2)+(S'*A2)"; }
-		pin(Y3) { direction: output; function: "(A3*B3)+(S*B3)+(S'*A3)"; }
 	}
 	cell(MUX2_4) { /* 74LVC157APW (N=1, pd=2.7ns, TSSOP16) */
 		area: 2;

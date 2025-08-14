@@ -1,0 +1,16 @@
+`ifndef __STAGES_SV__
+`define __STAGES_SV__
+
+`define STAGE_CONTROL 0
+`define STAGE_FETCH 1
+`define STAGE_DECODE 2
+`define STAGE_READ 3
+`define STAGE_EXECUTE 4
+`define STAGE_MEMORY 5
+`define STAGE_WRITE_BACK 6
+`define STAGE_UPDATE_PC 7
+`define NUM_STAGES 8
+
+`define DEFAULT_STAGE_ACTIVE `NUM_STAGES'd1 << `STAGE_CONTROL
+
+`endif
