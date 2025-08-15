@@ -5,28 +5,8 @@ BUILD_DIR := build
 # Project files
 TOP_VERILOG_SRC_FILE := verilog/core.sv
 VERILOG_SRC_FILES := \
-	verilog/core.sv \
-	verilog/program_counter.sv \
-	verilog/memory.sv \
-	verilog/instruction_decode.sv \
-	verilog/register_file.sv \
-	verilog/alu.sv \
-	verilog/adder4.sv \
-	verilog/adder32.sv \
-	verilog/shifter.sv \
-	verilog/cells/mux2.sv \
-	verilog/cells/mux2_2.sv \
-	verilog/cells/mux2_3.sv \
-	verilog/cells/mux2_4.sv \
-	verilog/cells/mux2_stages.sv \
-	verilog/cells/dff.sv \
-	verilog/cells/dff_2.sv \
-	verilog/cells/dff_3.sv \
-	verilog/cells/dff_8.sv \
-	verilog/cells/dff_stages.sv \
-	verilog/csr.sv \
-	verilog/fsm.sv \
-	verilog/stages.sv
+	$(wildcard verilog/*.sv) \
+	$(wildcard verilog/cells/*.sv)
 
 vpath %.sv verilog
 

@@ -1,11 +1,8 @@
 `include "stages.sv"
 `include "cells/dff.sv"
-`include "cells/dff_2.sv"
-`include "cells/dff_3.sv"
 `include "cells/dff_stages.sv"
-`include "cells/mux2_2.sv"
-`include "cells/mux2_3.sv"
-`include "cells/mux2_stages.sv"
+`include "cells/dffe.sv"
+`include "cells/mux2.sv"
 
 /*
  * FSM.
@@ -39,14 +36,22 @@ module fsm(
     /* Control Op */
     wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
     wire update_control_op = ~reset_n | (in_progress & (next_stage[`STAGE_CONTROL] | active_fault));
+    // TODO: Why doesn't this work?
+    // dffe #(.BITS(2)) control_op_dffe(
+    //     .clk(clk),
+    //     .clear_n(reset_n),
+    //     .enable_n(~update_control_op),
+    //     .in(control_op_value),
+    //     .out(control_op)
+    // );
     wire [1:0] next_control_op;
-    mux2_2 control_op_mux(
+    mux2 #(.BITS(2)) control_op_mux(
         .a(control_op),
         .b(control_op_value),
         .select(update_control_op),
         .out(next_control_op)
     );
-    dff_2 control_op_dff(
+    dff #(.BITS(2)) control_op_dff(
         .clk(clk),
         .clear_n(reset_n),
         .in(next_control_op),
@@ -78,30 +83,24 @@ module fsm(
         .in(fault_value),
         .out(fault)
     );
-    wire [2:0] next_fault_num;
-    mux2_3 fault_num_mux(
-        .a(fault_num),
-        .b(active_fault_num),
-        .select(active_fault),
-        .out(next_fault_num)
-    );
-    dff_3 fault_num_dff(
+    dffe #(.BITS(3)) fault_num_dffe(
         .clk(clk),
         .clear_n(reset_n),
-        .in(next_fault_num),
+        .enable_n(~active_fault),
+        .in(active_fault_num),
         .out(fault_num)
     );
 
     /* Active Stage */
     wire [`NUM_STAGES-1:0] next_stage_active;
     wire [`NUM_STAGES-1:0] next_stage_active_intermediate;
-    mux2_stages next_stage_active_intermediate_mux(
+    mux2 #(.BITS(`NUM_STAGES)) next_stage_active_intermediate_mux(
         .a(next_stage),
         .b(`DEFAULT_STAGE_ACTIVE),
         .select(active_fault),
         .out(next_stage_active_intermediate)
     );
-    mux2_stages next_stage_active_mux(
+    mux2 #(.BITS(`NUM_STAGES)) next_stage_active_mux(
         .a(stage_active),
         .b(next_stage_active_intermediate),
         .select(in_progress),

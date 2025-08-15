@@ -91,7 +91,7 @@ module core(
     instruction_decode decode_module(
         clk,
         reset_n,
-        stage_active[`STAGE_DECODE],
+        ~stage_active[`STAGE_DECODE],
         instr,
         decode_imm,
         decode_alu_a_mux_position,

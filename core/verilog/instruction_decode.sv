@@ -1,10 +1,14 @@
+`include "cells/and2.sv"
+`include "cells/dffe.sv"
+`include "cells/mux2.sv"
+
 /*
  * A decoder for the RV32I instruction set.
  */
 module instruction_decode(
     input logic clk, // Clock signal
     input logic reset_n, // Reset signal (active low)
-    input logic available, // Operation available
+    input logic enable_n, // Enable (active low)
     input logic [31:0] instr, // Instruction to decode
     output logic [31:0] imm, // Immediate value
     output logic alu_a_mux_position, // Position of the ALU A mux (0=rs1, 1=pc)
@@ -52,7 +56,7 @@ module instruction_decode(
     wire instr_is_system_e = instr_is_system_e_mret & ~instr_is_system_mret;
     wire instr_is_system_csr = opcode_is_system & ~instr_is_system_e_mret;
 
-    /* Read Stage Decode */
+    /* Read Stage */
     wire rd_rf_enable = ~(opcode_is_lui | opcode_is_auipc | opcode_is_jal | opcode_is_fence | opcode_is_system) |
         (instr_is_system_csr & ~funct3[2]);
     wire rs1_is_zero = ~rs1[4] & ~rs1[3] & ~rs1[2] & ~rs1[1] & ~rs1[0];
@@ -60,8 +64,20 @@ module instruction_decode(
         (opcode_is_fence & (~rs1_is_zero | (funct3[0] & (rs2 != 5'b0)))) |
         (instr_is_system_e & (~rs1_is_zero | rs2[4] | rs2[3] | rs2[2] | rs2[1])) |
         (instr_is_system_mret & (~rs1_is_zero | rs2[4] | rs2[3] | rs2[2] | ~rs2[1] | rs2[0]));
+    wire [8:0] next_rd_rf_microcode = {
+        ~invalid_instr & rd_rf_enable,
+        rs1[3:0],
+        rs2[3:0]
+    };
+    dffe #(.BITS(9)) rd_rf_microcode_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_rd_rf_microcode),
+        .out(rd_rf_microcode)
+    );
 
-    /* Execute Stage Decode */
+    /* Execute Stage */
     wire invalid_funct3 = (opcode_is_store & funct3[2]) |
         (opcode_is_jalr & funct3[0]) |
         (opcode_is_jalr & funct3[1]) |
@@ -83,90 +99,201 @@ module instruction_decode(
         (opcode_is_fence & funct3[0] & (funct7[2] | funct7[1] | funct7[0])) |
         (instr_is_system_e & (funct7[6] | funct7[5] | funct7[4] | funct7[3] | funct7[2] | funct7[1] | funct7[0])) |
         (instr_is_system_mret & (funct7[6] | funct7[5] | ~funct7[4] | ~funct7[3] | funct7[2] | funct7[1] | funct7[0]));
+    wire [5:0] next_ex_alu_microcode = {
+        ~invalid_instr & (opcode_is_op | opcode_is_opimm | opcode_is_branch | opcode_is_load | opcode_is_store | opcode_is_auipc |
+            opcode_is_jalr),
+        opcode_is_branch,
+        funct7[5] & ~funct3[1] & (opcode_is_op | opcode_is_opimm) & (opcode_is_op | funct3[2]) &
+            (funct3[2] | ~funct3[0]) & (~funct3[2] | funct3[0]),
+        ({3{opcode_is_op | opcode_is_opimm | opcode_is_branch}} & funct3)
+    };
+    dffe #(.BITS(6)) ex_alu_microcode_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_ex_alu_microcode),
+        .out(ex_alu_microcode)
+    );
+    wire [11:0] next_ex_csr_microcode_part;
+    mux2 #(.BITS(12)) next_ex_csr_microcode_part_mux(
+        .a({funct7, rs2}),
+        .b({8'b0, ~rs2[0], 3'b011}),
+        .select(instr_is_system_e),
+        .out(next_ex_csr_microcode_part)
+    );
+    wire [15:0] next_ex_csr_microcode = {
+        ~invalid_instr & opcode_is_system,
+        next_ex_csr_microcode_part,
+        instr_is_system_csr,
+        funct3[1],
+        funct3[0] | instr_is_system_mret
+    };
+    dffe #(.BITS(16)) ex_csr_microcode_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_ex_csr_microcode),
+        .out(ex_csr_microcode)
+    );
 
-    /* Write Back Stage Decode */
+    /* Memory Stage */
+    wire [4:0] next_ma_mem_microcode = {
+        ~invalid_instr & (opcode_is_load | opcode_is_store),
+        opcode_is_store,
+        funct3
+    };
+    dffe #(.BITS(5)) ma_mem_microcode_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_ma_mem_microcode),
+        .out(ma_mem_microcode)
+    );
+
+    /* Write Back Stage */
     wire wb_rf_enable = ~(opcode_is_store | opcode_is_branch | opcode_is_fence | instr_is_system_e_mret);
     wire rd_is_zero = ~rd[4] & ~rd[3] & ~rd[2] & ~rd[1] & ~rd[0];
     wire invalid_rd = (wb_rf_enable & rd[4]) | ((opcode_is_fence | instr_is_system_e_mret) & ~rd_is_zero);
+    wire [9:0] next_wb_rf_microcode = {
+        ~invalid_instr & wb_rf_enable,
+        1'b1,
+        rd[3:0],
+        4'b0
+    };
+    dffe #(.BITS(10)) wb_rf_microcode_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_wb_rf_microcode),
+        .out(wb_rf_microcode)
+    );
 
-    /* Immediate Signals Decode */
-    wire [19:0] imm_lower_lui_auipc = {rs1, funct3, 12'b0};
-    wire [19:0] imm_lower_system = {15'b0, rs1};
-    wire [19:0] imm_lower_jal = {rs1, funct3, rs2[0], funct7[5:0], rs2 & 5'b11110};
+    /* Immediate Signals */
+    wire [6:0] imm_lower_non_jal_middle;
+    mux2 #(.BITS(7)) imm_lower_non_jal_middle_mux(
+        .a(funct7),
+        .b({rd[0], funct7[5:0]}),
+        .select(opcode_is_branch),
+        .out(imm_lower_non_jal_middle)
+    );
+    wire [4:0] imm_lower_non_jal_lower;
+    wire [4:0] imm_lower_non_jal_lower_intermediate;
+    and2 #(.BITS(5)) imm_lower_non_jal_lower_intermediate_and(
+        .a(rd),
+        .b({4'b1111, ~opcode_is_branch}),
+        .out(imm_lower_non_jal_lower_intermediate)
+    );
+    mux2 #(.BITS(5)) imm_lower_non_jal_lower_mux(
+        .a(rs2),
+        .b(imm_lower_non_jal_lower_intermediate),
+        .select(opcode_is_branch | opcode_is_store),
+        .out(imm_lower_non_jal_lower)
+    );
     wire [19:0] imm_lower_non_jal = {
         {8{funct7[6]}},
-        opcode_is_branch ? {rd[0], funct7[5:0]} : funct7,
-        (opcode_is_branch | opcode_is_store) ? rd & {4'b1111, ~opcode_is_branch} : rs2
+        imm_lower_non_jal_middle,
+        imm_lower_non_jal_lower
     };
+    wire [11:0] imm_upper;
+    mux2 #(.BITS(12)) imm_upper_mux(
+        .a({12{~opcode_is_system & funct7[6]}}),
+        .b({funct7, rs2}),
+        .select(opcode_is_lui | opcode_is_auipc),
+        .out(imm_upper)
+    );
+    wire [4:0] imm_lower_non_system_intermediate;
+    and2 #(.BITS(5)) imm_lower_non_system_intermediate_and(
+        .a(rs2),
+        .b(5'b11110),
+        .out(imm_lower_non_system_intermediate)
+    );
+    wire [19:0] imm_lower_non_system;
+    mux2 #(.BITS(20)) imm_lower_non_system_mux(
+        .a(imm_lower_non_jal),
+        .b({rs1, funct3, rs2[0], funct7[5:0], imm_lower_non_system_intermediate}),
+        .select(opcode_is_jal),
+        .out(imm_lower_non_system)
+    );
+    wire [19:0] imm_lower_non_lua_auipc;
+    mux2 #(.BITS(20)) imm_lower_non_lua_auipc_mux(
+        .a(imm_lower_non_system),
+        .b({15'b0, rs1}),
+        .select(opcode_is_system),
+        .out(imm_lower_non_lua_auipc)
+    );
+    wire [19:0] imm_lower;
+    mux2 #(.BITS(20)) imm_lower_mux(
+        .a(imm_lower_non_lua_auipc),
+        .b({rs1, funct3, 12'b0}),
+        .select(opcode_is_lui | opcode_is_auipc),
+        .out(imm_lower)
+    );
+    wire [31:0] next_imm = {imm_upper, imm_lower};
+    dffe #(.BITS(32)) imm_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_imm),
+        .out(imm)
+    );
 
-    /* Logic */
+    /* Mux Position Signals */
+    wire next_alu_a_mux_position = instr_is_system_e | opcode_is_auipc;
+    dffe alu_a_mux_position_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_alu_a_mux_position),
+        .out(alu_a_mux_position)
+    );
+    wire next_alu_b_mux_position = ~opcode_is_branch & ~opcode_is_op;
+    dffe alu_b_mux_position_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_alu_b_mux_position),
+        .out(alu_b_mux_position)
+    );
+    wire [1:0] next_csr_mux_position = {instr_is_system_e, instr_is_system_csr & funct3[2]};
+    dffe #(.BITS(2)) csr_mux_position_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_csr_mux_position),
+        .out(csr_mux_position)
+    );
+    wire [1:0] next_wb_mux_position = {
+        (opcode_is_load | opcode_is_jalr | opcode_is_jal),
+        (opcode_is_lui | opcode_is_jalr | opcode_is_jal)
+    };
+    dffe #(.BITS(2)) wb_mux_position_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_wb_mux_position),
+        .out(wb_mux_position)
+    );
+    wire [1:0] next_wb_pc_mux_position = {
+        (opcode_is_branch | opcode_is_jal),
+        (opcode_is_jalr | opcode_is_branch | instr_is_system_e_mret)
+    };
+    dffe #(.BITS(2)) wb_pc_mux_position_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_wb_pc_mux_position),
+        .out(wb_pc_mux_position)
+    );
+
+    /* Fault */
     wire invalid_instr = invalid_opcode | invalid_rs | invalid_funct7 | invalid_funct3 | invalid_rd;
-    always_ff @(posedge clk) begin
-        if (~reset_n) begin
-            fault <= 0;
-        end else if (available) begin
-            fault <= invalid_instr;
-            /* Read Stage */
-            rd_rf_microcode <= {
-                ~invalid_instr & rd_rf_enable,
-                rs1[3:0],
-                rs2[3:0]
-            };
-
-            /* Execute Stage */
-            ex_alu_microcode <= {
-                ~invalid_instr & (opcode_is_op | opcode_is_opimm | opcode_is_branch | opcode_is_load | opcode_is_store | opcode_is_auipc |
-                    opcode_is_jalr),
-                opcode_is_branch,
-                funct7[5] & ~funct3[1] & (opcode_is_op | opcode_is_opimm) & (opcode_is_op | funct3[2]) &
-                    (funct3[2] | ~funct3[0]) & (~funct3[2] | funct3[0]),
-                ({3{opcode_is_op | opcode_is_opimm | opcode_is_branch}} & funct3)
-            };
-            ex_csr_microcode <= {
-                ~invalid_instr & opcode_is_system,
-                instr_is_system_e ? {8'b0, ~rs2[0], 3'b011} : {funct7, rs2},
-                instr_is_system_csr,
-                funct3[1],
-                funct3[0] | instr_is_system_mret
-            };
-
-            /* Memory Stage */
-            ma_mem_microcode <= {
-                ~invalid_instr & (opcode_is_load | opcode_is_store),
-                opcode_is_store,
-                funct3
-            };
-
-            /* Write Back Stage */
-            wb_rf_microcode <= {
-                ~invalid_instr & wb_rf_enable,
-                1'b1,
-                rd[3:0],
-                4'b0
-            };
-
-            /* Immediate Signals */
-            imm[31:20] <= (opcode_is_lui | opcode_is_auipc) ? {funct7, rs2} : {12{~opcode_is_system & funct7[6]}};
-            imm[19:0] <= (opcode_is_lui | opcode_is_auipc) ? imm_lower_lui_auipc : (
-                opcode_is_system ? imm_lower_system : (
-                opcode_is_jal ? imm_lower_jal : imm_lower_non_jal));
-
-            /* Mux Position Signals */
-            alu_a_mux_position <= instr_is_system_e | opcode_is_auipc;
-            alu_b_mux_position <= ~opcode_is_branch & ~opcode_is_op;
-            csr_mux_position <= {instr_is_system_e, instr_is_system_csr & funct3[2]};
-            wb_mux_position <= {
-                (opcode_is_load | opcode_is_jalr | opcode_is_jal),
-                (opcode_is_lui | opcode_is_jalr | opcode_is_jal)
-            };
-            wb_pc_mux_position <= {
-                (opcode_is_branch | opcode_is_jal),
-                (opcode_is_jalr | opcode_is_branch | instr_is_system_e_mret)
-            };
-        end else begin
-            fault <= 0;
-        end
-    end
+    dffe next_fault_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(invalid_instr),
+        .out(fault)
+    );
 
 `ifdef FORMAL
     initial assume(~reset_n);
@@ -192,7 +319,7 @@ module instruction_decode(
             if (!$past(reset_n)) begin
                 assert(!fault);
             end else begin
-                assume($past(available));
+                assume($past(~enable_n));
                 case ($past(instr[6:0]))
                     7'b0110111: begin // LUI
                         assert($past(opcode_is_lui));

@@ -30,6 +30,7 @@ def main(lines: list[str], target_signal: str) -> list[str]:
     node_name = node_pattern.match(lines[node_line]).group(1)
     node_attrs = node_pattern.match(lines[node_line]).group(2)
     edge_pattern = re.compile(r'^\s*%s:e\s*->\s*(.*);' % re.escape(node_name))
+    param_label_pattern = re.compile(r'^(.*\|)(\w+)\\n\$paramod&#9586;(\w+)&#9586;(\w+)=s\d+\'([01]+)(\|.*)$')
 
     new_lines = []
     clone_count = 0
@@ -37,6 +38,13 @@ def main(lines: list[str], target_signal: str) -> list[str]:
     for line in lines:
         m = edge_pattern.match(line)
         if not m:
+            # Clean up parameter labels
+            label_match = param_label_pattern.match(line)
+            if label_match:
+                prefix, node_name, node_type, node_param_name, node_param_value, suffix = label_match.groups()
+                node_param_value = int(node_param_value, 2)
+                node_type = f"{node_type}(.{node_param_name}({node_param_value}))"
+                line = f"{prefix}{node_name}\\n{node_type}{suffix}"
             new_lines.append(line)
             continue
 

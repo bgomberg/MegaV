@@ -1,23 +1,23 @@
-`ifndef __DFF_SV__
-`define __DFF_SV__
+`ifndef __DFFE_SV__
+`define __DFFE_SV__
 
 /*
- * A D-Type Flip-Flop.
+ * A D-Type Flip-Flop with Enable (74ALVCH16823DGG).
  */
-module dff #(
-    parameter BITS = 1,
-    parameter RESET_VALUE = 0
+module dffe #(
+    parameter BITS = 1
 ) (
     input logic clk, // Clock
     input logic clear_n, // Clear (active-low)
+    input logic enable_n, // Enable (active-low)
     input logic [BITS-1:0] in, // Input
     output logic [BITS-1:0] out // Output
 );
 
     always_ff @(posedge clk) begin
         if (~clear_n) begin
-            out <= RESET_VALUE;
-        end else begin
+            out <= 0;
+        end else if (~enable_n) begin
             out <= in;
         end
     end
@@ -32,10 +32,12 @@ module dff #(
     /* Validate logic */
     always_ff @(posedge clk) begin
         if (f_past_valid) begin
-            if ($past(clear_n)) begin
+            if (~$past(clear_n)) begin
+                assert(out == 0);
+            end else if (~$past(enable_n)) begin
                 assert(out == $past(in));
             end else begin
-                assert(out == RESET_VALUE);
+                assert(out == $past(out));
             end
         end
     end

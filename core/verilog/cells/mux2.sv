@@ -5,12 +5,12 @@
  * A 2:1 MUX.
  */
 module mux2 #(
-    parameter DATA_WIDTH = 1
+    parameter BITS = 1
 ) (
-    input [DATA_WIDTH-1:0] a, // Input A
-    input [DATA_WIDTH-1:0] b, // Input B
+    input [BITS-1:0] a, // Input A
+    input [BITS-1:0] b, // Input B
     input select, // Select
-    output [DATA_WIDTH-1:0] out // Output
+    output [BITS-1:0] out // Output
 );
 
     assign out = select ? b : a;
