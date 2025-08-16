@@ -44,14 +44,14 @@
   .string _STR;                                                       \
   .section .text;                                                     \
     la x10, 20001b;                                                   \
-    li x11, 0x20000000;                                               \
+    li x11, 0x30000000;                                               \
     sw x10, 0(x11);                                                   \
     lw x11, 4(_SP);                                                   \
     lw x10, 0(_SP);
 
 #define RVTEST_IO_WRITE_GFR(_SP, _R)                                  \
     sw x10, 8(_SP);                                                   \
-    li x10, 0x20000004;                                               \
+    li x10, 0x30000004;                                               \
     sw _R, 0(x10);                                                    \
     lw x10, 8(_SP);
 

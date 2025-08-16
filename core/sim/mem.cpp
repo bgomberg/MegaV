@@ -7,9 +7,9 @@
 
 #define FLASH_START   0x00000000
 #define FLASH_SIZE    0x00010000
-#define RAM_START     0x10000000
+#define RAM_START     0x20000000
 #define RAM_SIZE      0x00002000
-#define PERIPH_START  0x20000000
+#define PERIPH_START  0x30000000
 #define PERIPH_SIZE   0x00000008
 
 #define ARRAY_LENGTH(ARR) ((sizeof(ARR)) / sizeof(*(ARR)))

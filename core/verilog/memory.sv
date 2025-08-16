@@ -14,6 +14,14 @@ function mem_get_read_result;
 endfunction
 `endif
 
+/*
+Address Space:
+    0x00000000-0x1fffffff: FLASH
+    0x20000000-0x2fffffff: RAM
+    0x30000000-0x3fffffff: PERIPH
+    0x40000000-0xffffffff: RESERVED
+*/
+
 module memory(
     input logic clk, // Clock signal
     input logic reset_n, // Reset signal (active low)
