@@ -25,7 +25,7 @@ Address Space:
 module memory(
     input logic clk, // Clock signal
     input logic reset_n, // Reset signal (active low)
-    input logic available, // Operation available
+    input logic enable_n, // Enable (active low)
     input logic is_write /* verilator public */, // Whether or not the operation is a write
     input logic is_unsigned /* verilator public */, // Whether or not the read byte/half-word value should be zero-extended (vs. sign-extended)
     input logic [1:0] op /* verilator public */, // Size of the operation (2'b00=byte, 2'b01=half-word, 2'b10=word)
@@ -34,7 +34,7 @@ module memory(
     output logic [31:0] out, // Output data
     output logic op_fault, // Invalid op fault
     output logic addr_fault, // Misaligned address fault
-    output logic access_fault // Access fault
+    output logic access_fault_n // Access fault (active low)
 );
 
     /* Basic Decode */
@@ -45,19 +45,19 @@ module memory(
     always_ff @(posedge clk) begin
         if (~reset_n) begin
             out <= 32'b0;
-            addr_fault <= 0;
-            op_fault <= 0;
-            access_fault <= 0;
+            addr_fault <= 1'b0;
+            op_fault <= 1'b0;
+            access_fault_n <= 1'b1;
         end else begin
-            if (available) begin
+            if (~enable_n) begin
                 addr_fault <= addr_is_misaligned;
                 op_fault <= op_is_invalid;
-                access_fault <= mem_get_fault(addr, op[1], op[0], is_write);
+                access_fault_n <= ~mem_get_fault(addr, op[1], op[0], is_write);
                 out <= mem_get_read_result(addr, in, op[1], op[0], is_write, is_unsigned);
             end else begin
-                addr_fault <= 0;
-                op_fault <= 0;
-                access_fault <= 0;
+                addr_fault <= 1'b0;
+                op_fault <= 1'b0;
+                access_fault_n <= 1'b1;
             end
         end
     end
@@ -73,7 +73,7 @@ module memory(
     /* Read path */
     always_ff @(posedge clk) begin
         if (f_past_valid) begin
-            if (available) begin
+            if (~enable_n) begin
                 assume($stable(is_write));
                 assume($stable(is_unsigned));
                 assume($stable(op));
@@ -81,34 +81,34 @@ module memory(
                 assume($stable(in));
             end
             if ($past(~reset_n)) begin
-                assert(!op_fault);
-                assert(!addr_fault);
-                assert(!access_fault);
-            end else if ($past(available) && !available) begin
+                assert(~op_fault);
+                assert(~addr_fault);
+                assert(access_fault_n);
+            end else if ($past(~enable_n) & ~enable_n) begin
                 case ($past(op))
                     2'b00: begin // byte
-                        assert(!op_fault);
-                        assert(!addr_fault);
-                        assert(!access_fault);
+                        assert(~op_fault);
+                        assert(~addr_fault);
+                        assert(access_fault_n);
                     end
                     2'b01: begin // half-word
-                        assert(!op_fault);
+                        assert(~op_fault);
                         if ($past(addr[0])) begin
-                            assert(!access_fault);
+                            assert(access_fault_n);
                             assert(addr_fault);
                         end else begin
-                            assert(!access_fault);
-                            assert(!addr_fault);
+                            assert(access_fault_n);
+                            assert(~addr_fault);
                         end
                     end
                     2'b10: begin // word
-                        assert(!op_fault);
+                        assert(~op_fault);
                         if ($past(addr[1:0])) begin
-                            assert(!access_fault);
+                            assert(access_fault_n);
                             assert(addr_fault);
                         end else begin
-                            assert(!access_fault);
-                            assert(!addr_fault);
+                            assert(access_fault_n);
+                            assert(~addr_fault);
                         end
                     end
                     default: begin

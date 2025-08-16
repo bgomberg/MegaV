@@ -141,9 +141,9 @@ public:
         break;
       case STAGE_MEMORY:
         printf("    out: 0x%x\n", (*this)->mem_out);
-        printf("    mem_op_fault: 0x%x\n", (*this)->mem_op_fault);
-        printf("    mem_addr_fault: 0x%x\n", (*this)->mem_addr_fault);
-        printf("    mem_access_fault: 0x%x\n", (*this)->mem_access_fault);
+        printf("    mem_op_fault: %d\n", (*this)->mem_op_fault);
+        printf("    mem_addr_fault: %d\n", (*this)->mem_addr_fault);
+        printf("    mem_access_fault_n: %d\n", (*this)->mem_access_fault_n);
         break;
       case STAGE_WRITE_BACK:
         break;
