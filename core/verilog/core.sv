@@ -135,7 +135,7 @@ module core(
     alu alu_module(
         clk,
         reset_n,
-        stage_active[`STAGE_FETCH] | stage_active[`STAGE_WRITE_BACK] | (stage_active[`STAGE_EXECUTE] & decode_ex_alu_microcode[5]),
+        ~(stage_active[`STAGE_FETCH] | stage_active[`STAGE_WRITE_BACK] | (stage_active[`STAGE_EXECUTE] & decode_ex_alu_microcode[5])),
         {5{stage_active[`STAGE_EXECUTE]}} & decode_ex_alu_microcode[4:0],
         alu_in_a,
         alu_in_b,

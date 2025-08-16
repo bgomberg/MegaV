@@ -1,5 +1,10 @@
 `include "adder32.sv"
 `include "shifter.sv"
+`include "cells/and2.sv"
+`include "cells/dffe.sv"
+`include "cells/or2.sv"
+`include "cells/nor4.sv"
+`include "cells/xor2.sv"
 
 /*
  * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I/E instruction set.
@@ -7,7 +12,7 @@
 module alu(
     input logic clk, // Clock signal
     input logic reset_n, // Reset signal (active low)
-    input logic available, // Operation available
+    input logic enable_n, // Enable (active low)
     input logic [4:0] op, // Operation to be performed
     input logic [31:0] in_a, // Input data (bus A)
     input logic [31:0] in_b, // Input data (bus B)
@@ -22,15 +27,40 @@ module alu(
     wire op_is_branch_eq_ne = op[4] & ~op[2];
     wire op_is_branch_gt = op[4] & op[0];
     wire op_branch_slt_is_unsigned = (~op[4] & op[0]) | (op[2] & op[1]);
+    wire op_is_arith = ~op[4] & ~op[2] & ~op[1] & ~op[0];
+    wire op_is_xor = ~op[4] & op[2] & ~op[1] & ~op[0];
+    wire op_is_or = ~op[4] & op[2] & op[1] & ~op[0];
+    wire op_is_and = ~op[4] & op[2] & op[1] & op[0];
+    wire op_is_shift = ~op[4] & ~op[1] & op[0];
     wire is_invalid_op = (op[3] & op[1]) | (op[4] & op[3]) | (op[3] & ~op[2] & op[0]) | (op[3] & op[2] & ~op[0]) | (op[4] & ~op[2] & op[1]);
 
     /* Bitwise operations */
-    wire [31:0] xor_result = in_a ^ in_b;
-    wire [31:0] or_result = in_a | in_b;
-    wire [31:0] and_result = in_a & in_b;
+    wire [31:0] xor_result;
+    xor2 #(.BITS(32)) xor_result_xor(
+        .a(in_a),
+        .b(in_b),
+        .out(xor_result)
+    );
+    wire [31:0] or_result;
+    or2 #(.BITS(32)) or_result_or(
+        .a(in_a),
+        .b(in_b),
+        .out(or_result)
+    );
+    wire [31:0] and_result;
+    and2 #(.BITS(32)) and_result_and(
+        .a(in_a),
+        .b(in_b),
+        .out(and_result)
+    );
 
     /* Adder */
-    wire [31:0] adder_in_b = in_b ^ {32{~op_is_add}};
+    wire [31:0] adder_in_b;
+    xor2 #(.BITS(32)) adder_in_b_xor(
+        .a(in_b),
+        .b({32{~op_is_add}}),
+        .out(adder_in_b)
+    );
     wire adder_carry_in = ~op_is_add;
     wire [31:0] adder_sum;
     adder32 adder_module(
@@ -51,34 +81,72 @@ module alu(
     );
 
     /* Logic */
-    wire eq_result = (xor_result == 32'b0);
+    wire [7:0] xor_result_nibble_is_zero;
+    nor4 #(.BITS(8)) xor_result_nibble_is_zero_nor(
+        .a(xor_result[7:0]),
+        .b(xor_result[15:8]),
+        .c(xor_result[23:16]),
+        .d(xor_result[31:24]),
+        .out(xor_result_nibble_is_zero)
+    );
+    wire eq_result = (xor_result_nibble_is_zero == 8'b11111111);
     wire sign_cmp_result = (in_a[31] ^ op_branch_slt_is_unsigned) & ~(in_b[31] ^ op_branch_slt_is_unsigned);
     wire lt_ltu_result = sign_cmp_result | (~(in_a[31] ^ in_b[31]) & adder_sum[31] & ~eq_result);
     wire branch_slt_sltu_result = (op_is_branch_eq_ne ? eq_result : lt_ltu_result) ^ op_is_branch_gt;
-    always_ff @(posedge clk) begin
-        if (~reset_n) begin
-            // Reset
-            fault <= 0;
-        end else begin
-            if (available) begin
-                fault <= is_invalid_op;
-                if (~op[4] & ~op[2] & ~op[1] & ~op[0]) // ADD,SUB
-                    out <= adder_sum;
-                else if (~op[4] & op[2] & ~op[1] & ~op[0]) // XOR
-                    out <= xor_result;
-                else if (~op[4] & op[2] & op[1] & ~op[0]) // OR
-                    out <= or_result;
-                else if (~op[4] & op[2] & op[1] & op[0]) // AND
-                    out <= and_result;
-                else if (~op[4] & ~op[1] & op[0]) // SLL,SRL,SRA
-                    out <= shift_result;
-                else // SLT,SLTU,BEQ,BNE,BLT,BGE,BTLU,BGEU
-                    out <= {31'b0, branch_slt_sltu_result};
-            end else begin
-                fault <= 0;
-            end
-        end
-    end
+
+    /* Result */
+    wire op_is_arith_xor = op_is_arith | op_is_xor;
+    wire [31:0] result_arith_xor;
+    mux2 #(.BITS(32)) result_arith_xor_mux(
+        .a(adder_sum),
+        .b(xor_result),
+        .select(op_is_xor),
+        .out(result_arith_xor)
+    );
+    wire op_is_and_or = op_is_and | op_is_or;
+    wire [31:0] result_and_or;
+    mux2 #(.BITS(32)) result_and_or_mux(
+        .a(and_result),
+        .b(or_result),
+        .select(op_is_or),
+        .out(result_and_or)
+    );
+    wire op_is_arith_xor_and_or = op_is_arith_xor | op_is_and_or;
+    wire [31:0] result_arith_xor_and_or;
+    mux2 #(.BITS(32)) result_arith_xor_and_or_mux(
+        .a(result_arith_xor),
+        .b(result_and_or),
+        .select(op_is_and_or),
+        .out(result_arith_xor_and_or)
+    );
+    wire [31:0] result_shift_cmp;
+    mux2 #(.BITS(32)) result_shift_cmp_mux(
+        .a({31'b0, branch_slt_sltu_result}),
+        .b(shift_result),
+        .select(op_is_shift),
+        .out(result_shift_cmp)
+    );
+    wire [31:0] result;
+    mux2 #(.BITS(32)) result_mux(
+        .a(result_shift_cmp),
+        .b(result_arith_xor_and_or),
+        .select(op_is_arith_xor_and_or),
+        .out(result)
+    );
+    dffe #(.BITS(32)) out_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(result),
+        .out(out)
+    );
+    dffe fault_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(is_invalid_op),
+        .out(fault)
+    );
 
 `ifdef FORMAL
     initial assume(~reset_n);
@@ -94,7 +162,7 @@ module alu(
             if ($past(~reset_n)) begin
                 assert(!fault);
             end else begin
-                assume($past(available));
+                assume($past(~enable_n));
                 case ($past(op))
                     5'b0000: begin // ADD
                         assert(!fault);

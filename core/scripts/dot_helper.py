@@ -82,6 +82,7 @@ if __name__ == "__main__":
     lines = fix_param_labels(lines)
     lines = duplicate_signal(lines, "clk")
     lines = duplicate_signal(lines, "reset_n")
+    lines = duplicate_signal(lines, "enable_n")
 
     with open(dot_path, 'w') as f:
         f.write("\n".join(lines) + "\n")
