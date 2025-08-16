@@ -2,7 +2,7 @@
 `define __MUX2_SV__
 
 /*
- * A 2:1 MUX.
+ * 2:1 MUX
  */
 module mux2 #(
     parameter BITS = 1

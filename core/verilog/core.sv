@@ -47,7 +47,7 @@ module core(
     program_counter pc_module(
         clk,
         reset_n,
-        stage_active[`STAGE_UPDATE_PC],
+        ~stage_active[`STAGE_UPDATE_PC],
         {pc_in, 1'b0},
         pc_pc);
 
@@ -117,7 +117,7 @@ module core(
     register_file rf_module(
         clk,
         reset_n,
-        (stage_active[`STAGE_READ] & decode_has_read_stage) | (stage_active[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[9]),
+        ~((stage_active[`STAGE_READ] & decode_has_read_stage) | (stage_active[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[9])),
         ~(stage_active[`STAGE_READ] & decode_has_read_stage) & decode_wb_rf_microcode[8],
         decode_wb_rf_microcode[7:4],
         rf_write_data,

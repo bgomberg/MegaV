@@ -15,6 +15,8 @@ SBY_MODULES := \
 	nor2 \
 	nor4 \
 	mux2 \
+	mux8 \
+	demux4 \
 	dff \
 	dffe \
 	xor2

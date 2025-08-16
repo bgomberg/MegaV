@@ -1,3 +1,5 @@
+`include "cells/dffe.sv"
+
 /*
  * Program counter.
  */
@@ -5,20 +7,18 @@
 module program_counter(
     input logic clk, // Clock signal
     input logic reset_n, // Reset signal (active low)
-    input logic available, // Operation available
+    input logic enable_n, // Enable (active low)
     input logic [31:0] in, // Input data
     output logic [31:0] pc // Current PC
 );
 
-    /* Logic */
-    always_ff @(posedge clk) begin
-        if (~reset_n) begin
-            // Reset
-            pc <= 32'b0;
-        end else if (available) begin
-            pc <= in;
-        end
-    end
+    dffe #(.BITS(32)) pc_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(in),
+        .out(pc)
+    );
 
 `ifdef FORMAL
     initial assume(~reset_n);
@@ -34,7 +34,7 @@ module program_counter(
             if ($past(~reset_n)) begin
                 assert(pc == 0);
             end else begin
-                assume($past(available));
+                assume($past(~enable_n));
                 assert(pc == $past(in));
             end
         end

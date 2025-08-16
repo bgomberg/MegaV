@@ -6,7 +6,7 @@
 
 module dff_stages (
     input logic clk, // Clock
-    input logic clear_n, // Clear (active-low)
+    input logic clear_n, // Clear (active low)
     input logic [`NUM_STAGES-1:0] in, // Input
     output logic [`NUM_STAGES-1:0] out // Output
 );

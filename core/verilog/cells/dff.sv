@@ -9,7 +9,7 @@ module dff #(
     parameter RESET_VALUE = 0
 ) (
     input logic clk, // Clock
-    input logic clear_n, // Clear (active-low)
+    input logic clear_n, // Clear (active low)
     input logic [BITS-1:0] in, // Input
     output logic [BITS-1:0] out // Output
 );

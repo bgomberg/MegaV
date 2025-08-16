@@ -198,6 +198,12 @@ private:
   }
 };
 
+static void print_register(uint8_t num, uint32_t value) {
+  if (!value) {
+    return;
+  }
+  printf("  %s (x%u) = 0x%x\n", get_register_name(num), num, value);
+}
 
 int main(int argc, char** argv) {
   const bool compliance_mode = argc == 3;
@@ -262,17 +268,26 @@ int main(int argc, char** argv) {
 
   // Dump the non-zero registers and memory
   printf("Registers:\n");
-  for (uint8_t i = 1; i < 16; i++) {
-    uint32_t value = core->rf_module->registers[i-1];
-    if (value) {
-      printf("  %s (x%d) = 0x%x\n", get_register_name(i), i, value);
-    }
-  }
+  print_register(1, core->rf_module->r1);
+  print_register(2, core->rf_module->r2);
+  print_register(3, core->rf_module->r3);
+  print_register(4, core->rf_module->r4);
+  print_register(5, core->rf_module->r5);
+  print_register(6, core->rf_module->r6);
+  print_register(7, core->rf_module->r7);
+  print_register(8, core->rf_module->r8);
+  print_register(9, core->rf_module->r9);
+  print_register(10, core->rf_module->r10);
+  print_register(11, core->rf_module->r11);
+  print_register(12, core->rf_module->r12);
+  print_register(13, core->rf_module->r13);
+  print_register(14, core->rf_module->r14);
+  print_register(15, core->rf_module->r15);
   mem_dump_ram();
 
   if (compliance_mode) {
     // check the result
-    const uint32_t result = core->rf_module->registers[2];
+    const uint32_t result = core->rf_module->r3;
     if (result != 1) {
       fprintf(stderr, "Test failed with result %u\n", result);
       exit(1);
@@ -280,7 +295,7 @@ int main(int argc, char** argv) {
     // Open the reference output file
     FILE* ref_file = fopen(argv[2], "r");
     unsigned int value;
-    uint32_t mem_addr = core->rf_module->registers[1];
+    uint32_t mem_addr = core->rf_module->r2;
     while (fscanf(ref_file, "%x\n", &value) != EOF) {
       const uint32_t mem_value = mem_read(mem_addr);
       if (mem_value != value) {
