@@ -167,7 +167,7 @@ module core(
     csr csr_module(
         clk,
         reset_n,
-        stage_active[`STAGE_EXECUTE] | stage_active[`STAGE_MEMORY],
+        ~(stage_active[`STAGE_EXECUTE] | stage_active[`STAGE_MEMORY]),
         stage_active[`STAGE_MEMORY] & decode_ex_csr_microcode[15],
         ext_int,
         csr_op,

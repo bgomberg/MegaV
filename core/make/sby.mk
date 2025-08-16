@@ -12,6 +12,7 @@ SBY_MODULES := \
 	shifter \
 	and2 \
 	or2 \
+	nor2 \
 	nor4 \
 	mux2 \
 	dff \

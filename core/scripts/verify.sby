@@ -8,7 +8,7 @@ smtbmc yices
 [script]
 --pycode-begin--
 early_log(workdir, "Verifying module: {}".format(taskname))
-if taskname in ("and2", "dff", "dffe", "mux2", "nor4", "or2", "xor2"):
+if taskname in ("and2", "dff", "dffe", "mux2", "nor2", "nor4", "or2", "xor2"):
     output("read -formal -sv cells/{}.sv".format(taskname))
 else:
     output("read -formal -sv {}.sv".format(taskname))
@@ -30,6 +30,7 @@ mux2
 dff
 dffe
 or2
+nor2
 nor4
 xor2
 csr
@@ -47,6 +48,7 @@ verilog/adder32.sv
 verilog/shifter.sv
 cells/and2.sv verilog/cells/and2.sv
 cells/or2.sv verilog/cells/or2.sv
+cells/nor2.sv verilog/cells/nor2.sv
 cells/nor4.sv verilog/cells/nor4.sv
 cells/mux2.sv verilog/cells/mux2.sv
 cells/dff.sv verilog/cells/dff.sv
