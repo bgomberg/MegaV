@@ -15,43 +15,49 @@ def filter_graph_lines(lines: list[str], module_name: str) -> list[str]:
             found_module = False
     return new_lines
 
-def main(lines: list[str], target_signal: str) -> list[str]:
-    node_pattern = re.compile(r'^\s*(\S*)\s*\[(.*label="%s".*)\];' % re.escape(target_signal))
+def fix_param_labels(lines: list[str]) -> list[str]:
+    param_label_pattern = re.compile(r'^(.*\|)(\w+)\\n\$paramod&#9586;(\w+)&#9586;(\w+)=s\d+\'([01]+)(\|.*)$')
+    new_lines = []
+    for line in lines:
+        label_match = param_label_pattern.match(line)
+        if label_match:
+            prefix, module_name, module_type, module_param_name, module_param_value, suffix = label_match.groups()
+            module_param_value = int(module_param_value, 2)
+            module_type = f"{module_type}(.{module_param_name}({module_param_value}))"
+            line = f"{prefix}{module_name}\\n{module_type}{suffix}"
+        new_lines.append(line)
+    return new_lines
 
+def duplicate_signal(lines: list[str], target_signal: str) -> list[str]:
     node_line = None
+    node_attrs = None
+    edge_pattern = None
+    node_pattern = re.compile(r'^\s*(\S*)\s*\[(.*label="%s".*)\];' % re.escape(target_signal))
     for i, line in enumerate(lines):
-        if node_pattern.match(line):
+        m = node_pattern.match(line)
+        if m:
             node_line = i
+            node_attrs = m.group(2)
+            edge_pattern = re.compile(r'^\s*%s:e\s*->\s*(.*);' % re.escape(m.group(1)))
             break
 
     if node_line is None:
         return lines
 
-    node_name = node_pattern.match(lines[node_line]).group(1)
-    node_attrs = node_pattern.match(lines[node_line]).group(2)
-    edge_pattern = re.compile(r'^\s*%s:e\s*->\s*(.*);' % re.escape(node_name))
-    param_label_pattern = re.compile(r'^(.*\|)(\w+)\\n\$paramod&#9586;(\w+)&#9586;(\w+)=s\d+\'([01]+)(\|.*)$')
-
     new_lines = []
     clone_count = 0
 
     for line in lines:
-        m = edge_pattern.match(line)
+        m = edge_pattern.match(line) if edge_pattern else None
         if not m:
-            # Clean up parameter labels
-            label_match = param_label_pattern.match(line)
-            if label_match:
-                prefix, node_name, node_type, node_param_name, node_param_value, suffix = label_match.groups()
-                node_param_value = int(node_param_value, 2)
-                node_type = f"{node_type}(.{node_param_name}({node_param_value}))"
-                line = f"{prefix}{node_name}\\n{node_type}{suffix}"
             new_lines.append(line)
             continue
 
-        clone_count += 1
-        clone_name = f"{target_signal}_clone_{clone_count}"
-        new_line = f"{clone_name} -> {m.group(1)};"
-        new_lines.append(new_line)
+        if node_attrs:
+            clone_count += 1
+            clone_name = f"{target_signal}_clone_{clone_count}"
+            new_line = f"{clone_name} -> {m.group(1)};"
+            new_lines.append(new_line)
 
     clone_nodes_defs = []
     for i in range(1, clone_count + 1):
@@ -73,9 +79,9 @@ if __name__ == "__main__":
     # Keep just the graph for the top-level module
     module_name = os.path.splitext(os.path.basename(dot_path))[0]
     lines = filter_graph_lines(lines, module_name)
-
-    lines = main(lines, "clk")
-    lines = main(lines, "reset_n")
+    lines = fix_param_labels(lines)
+    lines = duplicate_signal(lines, "clk")
+    lines = duplicate_signal(lines, "reset_n")
 
     with open(dot_path, 'w') as f:
         f.write("\n".join(lines) + "\n")

@@ -1,3 +1,7 @@
+`include "cells/and2.sv"
+`include "cells/mux2.sv"
+`include "cells/xor2.sv"
+
 /*
  * A 4 bit full adder.
  */
@@ -9,21 +13,35 @@ module adder4(
     output carry_out // Carry out
 );
 
-    wire [3:0] prop = a ^ b;
-    wire [3:0] gen = a & b;
+    wire [3:0] prop;
+    xor2 #(.BITS(4)) prop_xor(
+        .a(a),
+        .b(b),
+        .out(prop)
+    );
+    wire [3:0] gen;
+    and2 #(.BITS(4)) gen_and(
+        .a(a),
+        .b(b),
+        .out(gen)
+    );
+
     wire all_prop = prop[0] & prop[1] & prop[2] & prop[3];
+    wire carry_0 = (prop[0] & carry_in) | gen[0];
+    wire carry_1 = (prop[1] & carry_0) | gen[1];
+    wire carry_2 = (prop[2] & carry_1) | gen[2];
+    mux2 carry_out_mux(
+        .a((prop[3] & carry_2) | gen[3]),
+        .b(carry_in),
+        .select(all_prop),
+        .out(carry_out)
+    );
 
-    wire carry_0 = (prop[0] & carry_in) | (gen[0]);
-    wire carry_1 = (prop[1] & carry_0) | (gen[1]);
-    wire carry_2 = (prop[2] & carry_1) | (gen[2]);
-    assign carry_out = all_prop ? carry_in : ((prop[3] & carry_2) | (gen[3]));
-
-    assign sum = {
-        prop[3] ^ carry_2,
-        prop[2] ^ carry_1,
-        prop[1] ^ carry_0,
-        prop[0] ^ carry_in
-    };
+    xor2 #(.BITS(4)) sum_xor(
+        .a(prop),
+        .b({carry_2, carry_1, carry_0, carry_in}),
+        .out(sum)
+    );
 
 `ifdef FORMAL
     /* Validate logic */

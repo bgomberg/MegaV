@@ -13,7 +13,8 @@ SBY_MODULES := \
 	and2 \
 	mux2 \
 	dff \
-	dffe
+	dffe \
+	xor2
 SBY_OBJ_DIR = $(BUILD_DIR)/sby
 SBY_RESULTS := $(addprefix $(SBY_OBJ_DIR)/,$(SBY_MODULES:=.pass))
 SBY_CONFIG_FILE := scripts/verify.sby
