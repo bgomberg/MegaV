@@ -16,13 +16,13 @@ module fsm(
     input logic mem_fault_is_store, // Memory fault is related to a store operation
     input logic ext_int, // External interrupt
     input logic sw_int, // Software interrupt
-    output logic [`NUM_STAGES-1:0] stage_active, // Current stage
+    output logic [`NUM_STAGES-1:0] stage_active_n, // Current stage (active low)
     output logic [1:0] control_op, // Control operation (2'b00=trap, 2'b01=ext_int, 2'b10=sw_int, 2'b11=normal)
     output logic [2:0] fault_num // Active fault number
 );
 
     /* Next Stage */
-    wire [`NUM_STAGES-1:0] next_stage = {stage_active[`NUM_STAGES-2:0], stage_active[`NUM_STAGES-1]};
+    wire [`NUM_STAGES-1:0] next_stage_n = {stage_active_n[`NUM_STAGES-2:0], stage_active_n[`NUM_STAGES-1]};
 
     /* In Progress */
     logic in_progress;
@@ -35,35 +35,22 @@ module fsm(
 
     /* Control Op */
     wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
-    wire update_control_op = ~reset_n | (in_progress & (next_stage[`STAGE_CONTROL] | active_fault));
-    // TODO: Why doesn't this work?
-    // dffe #(.BITS(2)) control_op_dffe(
-    //     .clk(clk),
-    //     .clear_n(reset_n),
-    //     .enable_n(~update_control_op),
-    //     .in(control_op_value),
-    //     .out(control_op)
-    // );
-    wire [1:0] next_control_op;
-    mux2 #(.BITS(2)) control_op_mux(
-        .a(control_op),
-        .b(control_op_value),
-        .select(update_control_op),
-        .out(next_control_op)
-    );
-    dff #(.BITS(2)) control_op_dff(
+    // TODO: There are some weird bugs that get exposed if this signal is simplified or non-public
+    wire update_control_op /* verilator public */ = ~reset_n | (in_progress & (~next_stage_n[`STAGE_CONTROL] | active_fault));
+    dffe #(.BITS(2)) control_op_dffe(
         .clk(clk),
         .clear_n(reset_n),
-        .in(next_control_op),
+        .enable_n(~update_control_op),
+        .in(control_op_value),
         .out(control_op)
     );
 
     /* Fault / Fault Number */
     logic fault;
     wire mem_fault = mem_addr_fault | mem_access_fault;
-    wire fetch_stage_mem_fault = mem_fault & stage_active[`STAGE_FETCH];
-    wire mem_stage_mem_fault = mem_fault & stage_active[`STAGE_MEMORY];
-    wire non_control_stage_instr_fault = ~stage_active[`STAGE_CONTROL] & illegal_instr_fault;
+    wire fetch_stage_mem_fault = mem_fault & ~stage_active_n[`STAGE_FETCH];
+    wire mem_stage_mem_fault = mem_fault & ~stage_active_n[`STAGE_MEMORY];
+    wire non_control_stage_instr_fault = stage_active_n[`STAGE_CONTROL] & illegal_instr_fault;
     wire active_fault = in_progress & (fetch_stage_mem_fault | mem_stage_mem_fault | non_control_stage_instr_fault);
     wire [2:0] active_fault_num = {
         mem_stage_mem_fault & ~non_control_stage_instr_fault,
@@ -92,25 +79,25 @@ module fsm(
     );
 
     /* Active Stage */
-    wire [`NUM_STAGES-1:0] next_stage_active;
-    wire [`NUM_STAGES-1:0] next_stage_active_intermediate;
-    mux2 #(.BITS(`NUM_STAGES)) next_stage_active_intermediate_mux(
-        .a(next_stage),
-        .b(`DEFAULT_STAGE_ACTIVE),
+    wire [`NUM_STAGES-1:0] next_stage_active_intermediate_n;
+    mux2 #(.BITS(`NUM_STAGES)) next_stage_active_intermediate_n_mux(
+        .a(next_stage_n),
+        .b(~`DEFAULT_STAGE_ACTIVE),
         .select(active_fault),
-        .out(next_stage_active_intermediate)
+        .out(next_stage_active_intermediate_n)
     );
-    mux2 #(.BITS(`NUM_STAGES)) next_stage_active_mux(
-        .a(stage_active),
-        .b(next_stage_active_intermediate),
+    wire [`NUM_STAGES-1:0] next_stage_active_n;
+    mux2 #(.BITS(`NUM_STAGES)) next_stage_active_n_mux(
+        .a(stage_active_n),
+        .b(next_stage_active_intermediate_n),
         .select(in_progress),
-        .out(next_stage_active)
+        .out(next_stage_active_n)
     );
     dff_stages stage_active_dff(
         .clk(clk),
         .clear_n(reset_n),
-        .in(next_stage_active),
-        .out(stage_active)
+        .in(next_stage_active_n),
+        .out(stage_active_n)
     );
 
 `ifdef FORMAL
@@ -122,6 +109,7 @@ module fsm(
     end
 
     /* Validate logic */
+    wire [`NUM_STAGES-1:0] stage_active = ~stage_active_n;
     always_ff @(posedge clk) begin
         if (f_past_valid) begin
             // Only one bit in stage_active should ever be set

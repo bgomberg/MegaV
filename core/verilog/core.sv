@@ -23,7 +23,7 @@ module core(
 
     /* FSM */
     /* verilator lint_off UNOPT */
-    wire [`NUM_STAGES-1:0] stage_active /* verilator public */;
+    wire [`NUM_STAGES-1:0] stage_active_n /* verilator public */;
     /* verilator lint_on UNOPT */
     wire [1:0] control_op /* verilator public */;
     wire control_op_normal = control_op[1] & control_op[0];
@@ -31,16 +31,17 @@ module core(
     wire control_op_ext_int = ~control_op[1] & control_op[0];
     wire control_op_sw_int = control_op[1] & ~control_op[0];
     logic [2:0] fault_num /* verilator public */;
+    wire fsm_illegal_instr_fault = decode_fault | mem_op_fault | alu_fault | csr_fault;
     (* keep *) fsm fsm_module(
         .clk(clk),
         .reset_n(reset_n),
-        .illegal_instr_fault(decode_fault | mem_op_fault | alu_fault | csr_fault),
+        .illegal_instr_fault(fsm_illegal_instr_fault),
         .mem_addr_fault(mem_addr_fault),
         .mem_access_fault(~mem_access_fault_n),
         .mem_fault_is_store(decode_ma_mem_microcode[3]),
         .ext_int(csr_ext_int_pending),
         .sw_int(csr_sw_int_pending),
-        .stage_active(stage_active),
+        .stage_active_n(stage_active_n),
         .control_op(control_op),
         .fault_num(fault_num)
     );
@@ -63,10 +64,11 @@ module core(
         .select(~decode_wb_pc_mux_position[1] & decode_wb_pc_mux_position[0]),
         .out(pc_in)
     );
+    wire pc_enable_n = stage_active_n[`STAGE_UPDATE_PC];
     (* keep *) program_counter pc_module(
         .clk(clk),
         .reset_n(reset_n),
-        .enable_n(~stage_active[`STAGE_UPDATE_PC]),
+        .enable_n(pc_enable_n),
         .in({pc_in, 1'b0}),
         .pc(pc_pc)
     );
@@ -78,24 +80,27 @@ module core(
     wire mem_access_fault_n /* verilator public */;
     wire [1:0] mem_op;
     mux2 #(.BITS(2)) mem_op_mux(
-        .a(decode_ma_mem_microcode[1:0]),
-        .b(2'b10),
-        .select(stage_active[`STAGE_FETCH]),
+        .a(2'b10),
+        .b(decode_ma_mem_microcode[1:0]),
+        .select(stage_active_n[`STAGE_FETCH]),
         .out(mem_op)
     );
     wire [31:0] mem_addr;
     mux2 #(.BITS(32)) mem_addr_mux(
-        .a(alu_out),
-        .b(pc_pc),
-        .select(stage_active[`STAGE_FETCH]),
+        .a(pc_pc),
+        .b(alu_out),
+        .select(stage_active_n[`STAGE_FETCH]),
         .out(mem_addr)
     );
+    wire mem_enable_n = (stage_active_n[`STAGE_FETCH] | ~control_op_normal) & (stage_active_n[`STAGE_MEMORY] | ~decode_has_mem_stage);
+    wire mem_is_write = ~stage_active_n[`STAGE_MEMORY] & decode_ma_mem_microcode[3];
+    wire mem_is_unsigned = ~stage_active_n[`STAGE_MEMORY] & decode_ma_mem_microcode[2];
     (* keep *) memory mem_module(
         .clk(clk),
         .reset_n(reset_n),
-        .enable_n(~((stage_active[`STAGE_FETCH] & control_op_normal) | (stage_active[`STAGE_MEMORY] & decode_has_mem_stage))),
-        .is_write(stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[3]),
-        .is_unsigned(stage_active[`STAGE_MEMORY] & decode_ma_mem_microcode[2]),
+        .enable_n(mem_enable_n),
+        .is_write(mem_is_write),
+        .is_unsigned(mem_is_unsigned),
         .op(mem_op),
         .addr(mem_addr),
         .in(rf_read_data_b),
@@ -129,10 +134,11 @@ module core(
         .select(control_op_normal),
         .out(instr)
     );
+    wire decode_enable_n = stage_active_n[`STAGE_DECODE];
     (* keep *) instruction_decode decode_module(
         .clk(clk),
         .reset_n(reset_n),
-        .enable_n(~stage_active[`STAGE_DECODE]),
+        .enable_n(decode_enable_n),
         .instr(instr),
         .imm(decode_imm),
         .alu_a_mux_position(decode_alu_a_mux_position),
@@ -167,11 +173,13 @@ module core(
     );
     wire [31:0] rf_read_data_a /* verilator public */;
     wire [31:0] rf_read_data_b /* verilator public */;
+    wire rf_enable = (~stage_active_n[`STAGE_READ] & decode_has_read_stage) | (~stage_active_n[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[9]);
+    wire rf_write_en = (stage_active_n[`STAGE_READ] | ~decode_has_read_stage) & decode_wb_rf_microcode[8];
     (* keep *) register_file rf_module(
         .clk(clk),
         .reset_n(reset_n),
-        .enable_n(~((stage_active[`STAGE_READ] & decode_has_read_stage) | (stage_active[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[9]))),
-        .write_en(~(stage_active[`STAGE_READ] & decode_has_read_stage) & decode_wb_rf_microcode[8]),
+        .enable_n(~rf_enable),
+        .write_en(rf_write_en),
         .write_addr(decode_wb_rf_microcode[7:4]),
         .write_data(rf_write_data),
         .read_addr_a(decode_rd_rf_microcode[7:4]),
@@ -187,34 +195,35 @@ module core(
     mux2 #(.BITS(32)) alu_in_a_mux(
         .a(rf_read_data_a),
         .b(pc_pc),
-        .select(stage_active[`STAGE_FETCH] | stage_active[`STAGE_WRITE_BACK] | decode_alu_a_mux_position),
+        .select(~stage_active_n[`STAGE_FETCH] | ~stage_active_n[`STAGE_WRITE_BACK] | decode_alu_a_mux_position),
         .out(alu_in_a)
     );
     wire [31:0] alu_in_b_intermediate;
     mux2 #(.BITS(32)) alu_in_b_intermediate_mux(
         .a(rf_read_data_b),
         .b(decode_imm),
-        .select(stage_active[`STAGE_WRITE_BACK] | decode_alu_b_mux_position),
+        .select(~stage_active_n[`STAGE_WRITE_BACK] | decode_alu_b_mux_position),
         .out(alu_in_b_intermediate)
     );
     wire [31:0] alu_in_b;
     mux2 #(.BITS(32)) alu_in_b_mux(
-        .a(alu_in_b_intermediate),
-        .b(32'h00000004),
-        .select(stage_active[`STAGE_FETCH]),
+        .a(32'h00000004),
+        .b(alu_in_b_intermediate),
+        .select(stage_active_n[`STAGE_FETCH]),
         .out(alu_in_b)
     );
     wire alu_fault;
     wire [4:0] alu_op;
     and2 #(.BITS(5)) alu_op_and(
-        .a({5{stage_active[`STAGE_EXECUTE]}}),
+        .a({5{~stage_active_n[`STAGE_EXECUTE]}}),
         .b(decode_ex_alu_microcode[4:0]),
         .out(alu_op)
     );
+    wire alu_enable_n = stage_active_n[`STAGE_FETCH] & stage_active_n[`STAGE_WRITE_BACK] & (stage_active_n[`STAGE_EXECUTE] | ~decode_ex_alu_microcode[5]);
     (* keep *) alu alu_module(
         .clk(clk),
         .reset_n(reset_n),
-        .enable_n(~(stage_active[`STAGE_FETCH] | stage_active[`STAGE_WRITE_BACK] | (stage_active[`STAGE_EXECUTE] & decode_ex_alu_microcode[5]))),
+        .enable_n(alu_enable_n),
         .op(alu_op),
         .in_a(alu_in_a),
         .in_b(alu_in_b),
@@ -224,21 +233,21 @@ module core(
     dffe #(.BITS(32)) pc_next_pc_dffe(
         .clk(clk),
         .clear_n(reset_n),
-        .enable_n(~stage_active[`STAGE_DECODE]),
+        .enable_n(stage_active_n[`STAGE_DECODE]),
         .in(alu_out),
         .out(pc_next_pc)
     );
     dffe #(.BITS(32)) ex_alu_out_dffe(
         .clk(clk),
         .clear_n(reset_n),
-        .enable_n(~stage_active[`STAGE_EXECUTE]),
+        .enable_n(stage_active_n[`STAGE_EXECUTE]),
         .in(alu_out),
         .out(ex_alu_out)
     );
     dffe #(.BITS(32)) pc_offset_pc_dffe(
         .clk(clk),
         .clear_n(reset_n),
-        .enable_n(~stage_active[`STAGE_WRITE_BACK]),
+        .enable_n(stage_active_n[`STAGE_WRITE_BACK]),
         .in(alu_out),
         .out(pc_offset_pc)
     );
@@ -248,7 +257,7 @@ module core(
     mux2 #(.BITS(3)) csr_op_mux(
         .a(3'b011),
         .b(decode_ex_csr_microcode[2:0]),
-        .select((stage_active[`STAGE_EXECUTE] | stage_active[`STAGE_MEMORY]) & decode_ex_csr_microcode[15]),
+        .select((~stage_active_n[`STAGE_EXECUTE] | ~stage_active_n[`STAGE_MEMORY]) & decode_ex_csr_microcode[15]),
         .out(csr_op)
     );
     wire [3:0] csr_trap_num;
@@ -285,11 +294,13 @@ module core(
     wire csr_fault;
     wire csr_ext_int_pending;
     wire csr_sw_int_pending;
+    wire csr_enable_n = stage_active_n[`STAGE_EXECUTE] & stage_active_n[`STAGE_MEMORY];
+    wire csr_is_write_stage = ~stage_active_n[`STAGE_MEMORY] & decode_ex_csr_microcode[15];
     (* keep *) csr csr_module(
         .clk(clk),
         .reset_n(reset_n),
-        .enable_n(~(stage_active[`STAGE_EXECUTE] | stage_active[`STAGE_MEMORY])),
-        .is_write_stage(stage_active[`STAGE_MEMORY] & decode_ex_csr_microcode[15]),
+        .enable_n(csr_enable_n),
+        .is_write_stage(csr_is_write_stage),
         .ext_int(ext_int),
         .op(csr_op),
         .addr_exception(csr_addr_exception),

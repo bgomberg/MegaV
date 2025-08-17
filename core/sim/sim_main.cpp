@@ -160,7 +160,7 @@ public:
   void step() {
     do {
       microstep();
-    } while ((*this)->stage_active != (1 << 0));
+    } while ((*this)->stage_active_n & (1 << 0));
     if (!compliance_mode_) {
       printf("\n");
     }
@@ -182,10 +182,10 @@ private:
   }
 
   int get_stage_num() {
-    const uint32_t stage = (*this)->stage_active;
+    const uint32_t stage = (*this)->stage_active_n;
     int stage_num = -1;
     for (int i = 0; i < NUM_STAGES; i++) {
-      if (stage == (1 << i)) {
+      if (!(stage & (1 << i))) {
         stage_num = i;
         break;
       }
