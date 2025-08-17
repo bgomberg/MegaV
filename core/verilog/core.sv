@@ -50,18 +50,21 @@ module core(
     wire [31:0] pc_pc /* verilator public */;
     logic [31:0] pc_next_pc /* verilator public */;
     logic [31:0] pc_offset_pc /* verilator public */;
-    wire [31:1] pc_in_wb;
-    mux2 #(.BITS(31)) pc_in_wb_mux(
-        .a(pc_next_pc[31:1]),
-        .b(pc_offset_pc[31:1]),
-        .select(decode_wb_pc_mux_position[1] & (~decode_wb_pc_mux_position[0] | ex_alu_out[0])),
-        .out(pc_in_wb[31:1])
+    wire pc_in_is_ex_result = decode_wb_pc_mux_position[1] & decode_wb_pc_mux_position[0];
+    wire [1:0] pc_in_mux_select;
+    mux2 #(.BITS(2)) pc_in_mux_select_mux(
+        .a(decode_wb_pc_mux_position),
+        .b({ex_alu_out[0], 1'b0}),
+        .select(pc_in_is_ex_result),
+        .out(pc_in_mux_select)
     );
     wire [31:1] pc_in;
-    mux2 #(.BITS(31)) pc_in_mux(
-        .a(pc_in_wb),
-        .b(ex_out[31:1]),
-        .select(~decode_wb_pc_mux_position[1] & decode_wb_pc_mux_position[0]),
+    mux4 #(.BITS(31)) pc_in_mux(
+        .d1(pc_next_pc[31:1]),
+        .d2(ex_out[31:1]),
+        .d3(pc_offset_pc[31:1]),
+        .d4(31'b0),
+        .select(pc_in_mux_select),
         .out(pc_in)
     );
     wire pc_enable_n = stage_active_n[`STAGE_UPDATE_PC];
@@ -78,12 +81,12 @@ module core(
     wire mem_op_fault /* verilator public */;
     wire mem_addr_fault /* verilator public */;
     wire mem_access_fault_n /* verilator public */;
-    wire [1:0] mem_op;
-    mux2 #(.BITS(2)) mem_op_mux(
+    wire [1:0] mem_op_size;
+    mux2 #(.BITS(2)) mem_op_size_mux(
         .a(2'b10),
         .b(decode_ma_mem_microcode[1:0]),
         .select(stage_active_n[`STAGE_FETCH]),
-        .out(mem_op)
+        .out(mem_op_size)
     );
     wire [31:0] mem_addr;
     mux2 #(.BITS(32)) mem_addr_mux(
@@ -101,7 +104,7 @@ module core(
         .enable_n(mem_enable_n),
         .is_write(mem_is_write),
         .is_unsigned(mem_is_unsigned),
-        .op(mem_op),
+        .op_size(mem_op_size),
         .addr(mem_addr),
         .in(rf_read_data_b),
         .out(mem_out),
@@ -121,7 +124,7 @@ module core(
     wire [15:0] decode_ex_csr_microcode /* verilator public */;
     wire [3:0] decode_ma_mem_microcode /* verilator public */;
     /* verilator lint_off UNOPT */
-    wire [9:0] decode_wb_rf_microcode /* verilator public */;
+    wire [4:0] decode_wb_rf_microcode /* verilator public */;
     /* verilator lint_on UNOPT */
     wire [1:0] decode_wb_pc_mux_position /* verilator public */;
     wire decode_has_mem_stage;
@@ -173,14 +176,16 @@ module core(
     );
     wire [31:0] rf_read_data_a /* verilator public */;
     wire [31:0] rf_read_data_b /* verilator public */;
-    wire rf_enable = (~stage_active_n[`STAGE_READ] & decode_has_read_stage) | (~stage_active_n[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[9]);
-    wire rf_write_en = (stage_active_n[`STAGE_READ] | ~decode_has_read_stage) & decode_wb_rf_microcode[8];
+    wire rf_is_read_stage = ~stage_active_n[`STAGE_READ] & decode_has_read_stage;
+    wire rf_is_wb_stage = ~stage_active_n[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[4];
+    wire rf_enable_n = ~rf_is_read_stage & ~rf_is_wb_stage;
+    wire rf_write_en = ~rf_is_read_stage;
     (* keep *) register_file rf_module(
         .clk(clk),
         .reset_n(reset_n),
-        .enable_n(~rf_enable),
+        .enable_n(rf_enable_n),
         .write_en(rf_write_en),
-        .write_addr(decode_wb_rf_microcode[7:4]),
+        .write_addr(decode_wb_rf_microcode[3:0]),
         .write_data(rf_write_data),
         .read_addr_a(decode_rd_rf_microcode[7:4]),
         .read_data_a(rf_read_data_a),
@@ -198,18 +203,13 @@ module core(
         .select(~stage_active_n[`STAGE_FETCH] | ~stage_active_n[`STAGE_WRITE_BACK] | decode_alu_a_mux_position),
         .out(alu_in_a)
     );
-    wire [31:0] alu_in_b_intermediate;
-    mux2 #(.BITS(32)) alu_in_b_intermediate_mux(
-        .a(rf_read_data_b),
-        .b(decode_imm),
-        .select(~stage_active_n[`STAGE_WRITE_BACK] | decode_alu_b_mux_position),
-        .out(alu_in_b_intermediate)
-    );
     wire [31:0] alu_in_b;
-    mux2 #(.BITS(32)) alu_in_b_mux(
-        .a(32'h00000004),
-        .b(alu_in_b_intermediate),
-        .select(stage_active_n[`STAGE_FETCH]),
+    mux4 #(.BITS(32)) alu_in_b_mux(
+        .d1(32'h00000004),
+        .d2(32'h00000004),
+        .d3(rf_read_data_b),
+        .d4(decode_imm),
+        .select({stage_active_n[`STAGE_FETCH], ~stage_active_n[`STAGE_WRITE_BACK] | decode_alu_b_mux_position}),
         .out(alu_in_b)
     );
     wire alu_fault;

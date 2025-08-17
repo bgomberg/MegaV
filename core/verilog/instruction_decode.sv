@@ -21,8 +21,8 @@ module instruction_decode(
     output logic [5:0] ex_alu_microcode, // Execute stage ALU microcode
     output logic [4:0] ma_mem_microcode, // Memory access stage memory microcode
     output logic [15:0] ex_csr_microcode, // Execute stage CSR microcode
-    output logic [9:0] wb_rf_microcode, // Write back stage register file microcode
-    output logic [1:0] wb_pc_mux_position, // Write back stage program counter microcode (00=npc, 01=I[31:1], 10=pc+offset, 11=Y?I+offset:npc)
+    output logic [4:0] wb_rf_microcode, // Write back stage register file microcode
+    output logic [1:0] wb_pc_mux_position, // Write back stage program counter mux position (00=npc, 01=I[31:1], 10=pc+offset, 11=Y?I+offset:npc)
     output logic fault // Fault condition (i.e. invalid instruction)
 );
 
@@ -154,13 +154,11 @@ module instruction_decode(
     wire wb_rf_enable = ~(opcode_is_store | opcode_is_branch | opcode_is_fence | instr_is_system_e_mret);
     wire rd_is_zero = ~rd[4] & ~rd[3] & ~rd[2] & ~rd[1] & ~rd[0];
     wire invalid_rd = (wb_rf_enable & rd[4]) | ((opcode_is_fence | instr_is_system_e_mret) & ~rd_is_zero);
-    wire [9:0] next_wb_rf_microcode = {
+    wire [4:0] next_wb_rf_microcode = {
         ~invalid_instr & wb_rf_enable,
-        1'b1,
-        rd[3:0],
-        4'b0
+        rd[3:0]
     };
-    dffe #(.BITS(10)) wb_rf_microcode_dffe(
+    dffe #(.BITS(5)) wb_rf_microcode_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(enable_n),
@@ -333,7 +331,7 @@ module instruction_decode(
                             assert(ex_alu_microcode[5] == 1'b0);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
+                            assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
                             assert(wb_pc_mux_position == 2'b00);
                         end
                     end
@@ -351,7 +349,7 @@ module instruction_decode(
                             assert(ex_alu_microcode == 6'b100000);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
+                            assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
                             assert(wb_pc_mux_position == 2'b00);
                         end
                     end
@@ -367,7 +365,7 @@ module instruction_decode(
                             assert(ex_alu_microcode[5] == 1'b0);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
+                            assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
                             assert(wb_pc_mux_position == 2'b10);
                         end
                     end
@@ -388,7 +386,7 @@ module instruction_decode(
                             assert(ex_alu_microcode == 6'b100000);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
+                            assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
                             assert(wb_pc_mux_position == 2'b01);
                         end
                     end
@@ -407,7 +405,7 @@ module instruction_decode(
                             assert(ex_alu_microcode == {3'b110, $past(instr[14:12])});
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode[9] == 1'b0);
+                            assert(wb_rf_microcode[4] == 1'b0);
                             assert(wb_pc_mux_position == 2'b11);
                         end
                     end
@@ -428,7 +426,7 @@ module instruction_decode(
                             assert(ex_alu_microcode == 6'b100000);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode == {2'b10, $past(instr[14:12])});
-                            assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
+                            assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
                             assert(wb_pc_mux_position == 2'b00);
                         end
                     end
@@ -447,7 +445,7 @@ module instruction_decode(
                             assert(ex_alu_microcode == 6'b100000);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode == {2'b11, $past(instr[14:12])});
-                            assert(wb_rf_microcode[9] == 1'b0);
+                            assert(wb_rf_microcode[4] == 1'b0);
                             assert(wb_pc_mux_position == 2'b00);
                         end
                     end
@@ -473,7 +471,7 @@ module instruction_decode(
                             end
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
+                            assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
                             assert(wb_pc_mux_position == 2'b00);
                         end
                     end
@@ -494,7 +492,7 @@ module instruction_decode(
                             assert(ex_alu_microcode == {2'b10, $past(instr[30]), $past(instr[14:12])});
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
+                            assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
                             assert(wb_pc_mux_position == 2'b00);
                         end
                     end
@@ -518,7 +516,7 @@ module instruction_decode(
                             assert(ex_alu_microcode[5] == 1'b0);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode[9] == 1'b0);
+                            assert(wb_rf_microcode[4] == 1'b0);
                             assert(wb_pc_mux_position == 2'b00);
                         end
                     end
@@ -538,7 +536,7 @@ module instruction_decode(
                             assert(ex_alu_microcode[5] == 1'b0);
                             assert(ex_csr_microcode == {1'b1, 8'b00000000, ~$past(instr[20]), 3'b011, 3'b000});
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode[9] == 1'b0);
+                            assert(wb_rf_microcode[4] == 1'b0);
                             assert(wb_pc_mux_position == 2'b01);
                             assert(csr_mux_position == 2'b10);
                         end else if ($past(instr) == 32'b00110000001000000000000001110011) begin
@@ -555,7 +553,7 @@ module instruction_decode(
                             assert(ex_csr_microcode[15] == 1'b1);
                             assert(ex_csr_microcode[2:0] == 3'b001);
                             assert(ma_mem_microcode[4] == 1'b0);
-                            assert(wb_rf_microcode[9] == 1'b0);
+                            assert(wb_rf_microcode[4] == 1'b0);
                             assert(wb_pc_mux_position == 2'b01);
                         end else if ($past(instr[14:12]) != 3'b000) begin
                             // CSR
@@ -591,7 +589,7 @@ module instruction_decode(
                                 assert(ex_alu_microcode[5] == 1'b0);
                                 assert(ex_csr_microcode == {1'b1, $past(instr[31:20]), 1'b1, $past(instr[13:12])});
                                 assert(ma_mem_microcode[4] == 1'b0);
-                                assert(wb_rf_microcode == {2'b11, $past(instr[10:7]), 4'b0});
+                                assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
                                 assert(wb_pc_mux_position == 2'b00);
                                 assert(wb_mux_position == 2'b00);
                             end
