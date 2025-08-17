@@ -1,8 +1,11 @@
-`include "stages.sv"
 `include "cells/dff.sv"
 `include "cells/dff_stages.sv"
 `include "cells/dffe.sv"
 `include "cells/mux2.sv"
+`include "cells/mux4.sv"
+`include "constants/fsm_control_op.sv"
+`include "constants/fsm_fault_num.sv"
+`include "constants/stages.sv"
 
 /*
  * FSM.
@@ -17,7 +20,7 @@ module fsm(
     input logic ext_int, // External interrupt
     input logic sw_int, // Software interrupt
     output logic [`NUM_STAGES-1:0] stage_active_n, // Current stage (active low)
-    output logic [1:0] control_op, // Control operation (2'b00=trap, 2'b01=ext_int, 2'b10=sw_int, 2'b11=normal)
+    output logic [1:0] control_op, // Control operation
     output logic [2:0] fault_num // Active fault number
 );
 
@@ -34,6 +37,13 @@ module fsm(
     );
 
     /* Control Op */
+    wire fault_value;
+    mux2 fault_value_mux(
+        .a(fault),
+        .b(active_fault),
+        .select(in_progress),
+        .out(fault_value)
+    );
     wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
     // TODO: There are some weird bugs that get exposed if this signal is simplified or non-public
     wire update_control_op /* verilator public */ = ~reset_n | (in_progress & (~next_stage_n[`STAGE_CONTROL] | active_fault));
@@ -52,45 +62,34 @@ module fsm(
     wire mem_stage_mem_fault = mem_fault & ~stage_active_n[`STAGE_MEMORY];
     wire non_control_stage_instr_fault = stage_active_n[`STAGE_CONTROL] & illegal_instr_fault;
     wire active_fault = in_progress & (fetch_stage_mem_fault | mem_stage_mem_fault | non_control_stage_instr_fault);
-    wire [2:0] active_fault_num = {
+    wire [2:0] next_fault_num = {
         mem_stage_mem_fault & ~non_control_stage_instr_fault,
         (mem_stage_mem_fault & mem_fault_is_store) | non_control_stage_instr_fault,
         ~non_control_stage_instr_fault & ~mem_addr_fault & mem_access_fault
     };
-    wire fault_value;
-    mux2 fault_value_mux(
-        .a(fault),
-        .b(active_fault),
-        .select(in_progress),
-        .out(fault_value)
-    );
-    dff fault_dff(
+    dffe fault_dff(
         .clk(clk),
         .clear_n(reset_n),
-        .in(fault_value),
+        .enable_n(~in_progress),
+        .in(active_fault),
         .out(fault)
     );
     dffe #(.BITS(3)) fault_num_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(~active_fault),
-        .in(active_fault_num),
+        .in(next_fault_num),
         .out(fault_num)
     );
 
     /* Active Stage */
-    wire [`NUM_STAGES-1:0] next_stage_active_intermediate_n;
-    mux2 #(.BITS(`NUM_STAGES)) next_stage_active_intermediate_n_mux(
-        .a(next_stage_n),
-        .b(~`DEFAULT_STAGE_ACTIVE),
-        .select(active_fault),
-        .out(next_stage_active_intermediate_n)
-    );
     wire [`NUM_STAGES-1:0] next_stage_active_n;
-    mux2 #(.BITS(`NUM_STAGES)) next_stage_active_n_mux(
-        .a(stage_active_n),
-        .b(next_stage_active_intermediate_n),
-        .select(in_progress),
+    mux4 #(.BITS(`NUM_STAGES)) next_stage_active_n_mux(
+        .d1(stage_active_n),
+        .d2(stage_active_n),
+        .d3(next_stage_n),
+        .d4(~`DEFAULT_STAGE_ACTIVE),
+        .select({in_progress, active_fault}),
         .out(next_stage_active_n)
     );
     dff_stages stage_active_dff(
@@ -122,33 +121,26 @@ module fsm(
             end else begin
                 assert(stage_active == (1 << 0) || stage_active != $past(stage_active));
                 if ($past(illegal_instr_fault) && !$past(stage_active[`STAGE_CONTROL])) begin
-                    // Illegal instruction
                     assert(stage_active == (1 << 0));
-                    assert(fault_num == 3'b010);
+                    assert(fault_num == `FSM_FAULT_NUM_ILLEGAL_INSTR);
                 end else if ($past(mem_addr_fault) && $past(stage_active[`STAGE_FETCH])) begin
-                    // Instruction address misaligned
                     assert(stage_active == (1 << 0));
-                    assert(fault_num == 3'b000);
+                    assert(fault_num == `FSM_FAULT_NUM_INSTR_ADDR_MISALIGNED);
                 end else if ($past(mem_addr_fault) && $past(stage_active[`STAGE_MEMORY])) begin
                     assert(stage_active == (1 << 0));
                     if ($past(mem_fault_is_store)) begin
-                        // Store address misaligned
-                        assert(fault_num == 3'b110);
+                        assert(fault_num == `FSM_FAULT_NUM_STORE_ADDR_MISALIGNED);
                     end else begin
-                        // Load address misaligned
-                        assert(fault_num == 3'b100);
+                        assert(fault_num == `FSM_FAULT_NUM_LOAD_ADDR_MISALIGNED);
                     end
                 end else if ($past(mem_access_fault) && $past(stage_active[`STAGE_FETCH])) begin
-                    // Instruction access fault
-                    assert(fault_num == 3'b001);
+                    assert(fault_num == `FSM_FAULT_NUM_INSTR_ACCESS_FAULT);
                 end else if ($past(mem_access_fault) && $past(stage_active[`STAGE_MEMORY])) begin
                     assert(stage_active == (1 << 0));
                     if ($past(mem_fault_is_store)) begin
-                        // Store access fault
-                        assert(fault_num == 3'b111);
+                        assert(fault_num == `FSM_FAULT_NUM_STORE_ACCESS_FAULT);
                     end else begin
-                        // Load access fault
-                        assert(fault_num == 3'b101);
+                        assert(fault_num == `FSM_FAULT_NUM_LOAD_ACCESS_FAULT);
                     end
                 end else begin
                     // Stage was completed without a fault

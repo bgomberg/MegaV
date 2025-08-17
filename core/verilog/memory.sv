@@ -1,22 +1,9 @@
-/*
- * Memory access unit.
- */
-
-`define MEM_OP_SIZE_BYTE 2'b00
-`define MEM_OP_SIZE_HALF_WORD 2'b01
-`define MEM_OP_SIZE_WORD 2'b10
-
-`ifdef verilator
-import "DPI-C" function bit mem_get_fault(int addr, bit op_h, bit op_l, bit is_write);
-import "DPI-C" function int mem_get_read_result(int addr, int write_val, bit op_h, bit op_l, bit is_write, bit is_unsigned);
-`else
-function mem_get_fault;
-    mem_get_fault = 1'b0;
-endfunction
-function mem_get_read_result;
-    mem_get_read_result = 32'b0;
-endfunction
-`endif
+`include "cells/dff.sv"
+`include "cells/dffe.sv"
+`include "cells/external_memory.sv"
+`include "cells/mux2.sv"
+`include "cells/or2.sv"
+`include "constants/mem_op_size.sv"
 
 /*
 Address Space:
@@ -26,6 +13,9 @@ Address Space:
     0x40000000-0xffffffff: RESERVED
 */
 
+/*
+ * Memory access unit.
+ */
 module memory(
     input logic clk, // Clock signal
     input logic reset_n, // Reset signal (active low)
@@ -41,30 +31,77 @@ module memory(
     output logic access_fault_n // Access fault (active low)
 );
 
-    /* Basic Decode */
-    wire op_is_invalid = op_size[1] & op_size[0];
-    wire addr_is_misaligned = (op_size[1] & (addr[1] | addr[0])) | (op_size[0] & addr[0]);
+    /* Size Decode */
+    wire op_size_is_byte = ~op_size[1] & ~op_size[0];
+    wire op_size_is_half_word = ~op_size[1] & op_size[0];
+    wire op_size_is_word = op_size[1] & ~op_size[0];
+    wire op_size_is_invalid = op_size[1] & op_size[0];
+    wire addr_is_misaligned = (op_size_is_word & (addr[1] | addr[0])) | (op_size_is_half_word & addr[0]);
 
-    /* Memory Access */
-    always_ff @(posedge clk) begin
-        if (~reset_n) begin
-            out <= 32'b0;
-            addr_fault <= 1'b0;
-            op_fault <= 1'b0;
-            access_fault_n <= 1'b1;
-        end else begin
-            if (~enable_n) begin
-                addr_fault <= addr_is_misaligned;
-                op_fault <= op_is_invalid;
-                access_fault_n <= ~mem_get_fault(addr, op_size[1], op_size[0], is_write);
-                out <= mem_get_read_result(addr, in, op_size[1], op_size[0], is_write, is_unsigned);
-            end else begin
-                addr_fault <= 1'b0;
-                op_fault <= 1'b0;
-                access_fault_n <= 1'b1;
-            end
-        end
-    end
+    /* External Memory */
+    wire active = reset_n & ~enable_n & ~addr_is_misaligned & ~op_size_is_invalid;
+    wire [31:0] out_data;
+    wire next_access_fault;
+    external_memory external_mem(
+        .enable(active),
+        .is_write(is_write),
+        .op_size(op_size),
+        .addr(addr),
+        .in(in),
+        .out(out_data),
+        .access_fault(next_access_fault)
+    );
+
+    /* Data Output */
+    wire sign_bit;
+    mux2 sign_bit_mux(
+        .a(out_data[7]),
+        .b(out_data[15]),
+        .select(op_size_is_half_word),
+        .out(sign_bit)
+    );
+    wire [15:0] out_upper_half_word;
+    or2 #(.BITS(16)) out_upper_half_word_or(
+        .a({16{sign_bit & ~is_unsigned & ~op_size_is_word}}),
+        .b(out_data[31:16]),
+        .out(out_upper_half_word)
+    );
+    wire [7:0] out_lower_half_word_upper_byte;
+    or2 #(.BITS(8)) out_lower_half_word_upper_byte_or(
+        .a({8{sign_bit & ~is_unsigned & op_size_is_byte}}),
+        .b(out_data[15:8]),
+        .out(out_lower_half_word_upper_byte)
+    );
+    dffe #(.BITS(32)) out_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in({out_upper_half_word, out_lower_half_word_upper_byte, out_data[7:0]}),
+        .out(out)
+    );
+
+    /* Fault */
+    wire access_fault;
+    dffe access_fault_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(enable_n),
+        .in(next_access_fault),
+        .out(access_fault)
+    );
+    assign access_fault_n = ~access_fault;
+    dff addr_fault_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .in(~enable_n & addr_is_misaligned),
+        .out(addr_fault)
+    );
+    dff op_fault_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .in(~enable_n & op_size_is_invalid),
+        .out(op_fault)
+    );
 
 `ifdef FORMAL
     initial assume(~reset_n);

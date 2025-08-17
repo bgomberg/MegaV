@@ -49,6 +49,13 @@ verilog/alu.sv
 verilog/adder4.sv
 verilog/adder32.sv
 verilog/shifter.sv
+verilog/csr.sv
+verilog/fsm.sv
+constants/fsm_control_op.sv verilog/constants/fsm_control_op.sv
+constants/fsm_fault_num.sv verilog/constants/fsm_fault_num.sv
+constants/mem_fault_num.sv verilog/constants/mem_fault_num.sv
+constants/mem_op_size.sv verilog/constants/mem_op_size.sv
+constants/stages.sv verilog/constants/stages.sv
 cells/and2.sv verilog/cells/and2.sv
 cells/or2.sv verilog/cells/or2.sv
 cells/nor2.sv verilog/cells/nor2.sv
@@ -61,6 +68,4 @@ cells/dff.sv verilog/cells/dff.sv
 cells/dff_stages.sv verilog/cells/dff_stages.sv
 cells/dffe.sv verilog/cells/dffe.sv
 cells/xor2.sv verilog/cells/xor2.sv
-verilog/csr.sv
-verilog/fsm.sv
-verilog/stages.sv
+cells/external_memory.sv verilog/cells/external_memory.sv

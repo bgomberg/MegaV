@@ -1,0 +1,9 @@
+`ifndef __FSM_CONTROL_OP_SV__
+`define __FSM_CONTROL_OP_SV__
+
+`define FSM_CONTROL_OP_TRAP 2'b00
+`define FSM_CONTROL_OP_EXT_INT 2'b01
+`define FSM_CONTROL_OP_SW_INT 2'b10
+`define FSM_CONTROL_OP_NORMAL 2'b11
+
+`endif

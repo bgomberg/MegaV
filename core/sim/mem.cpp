@@ -5,12 +5,16 @@
 
 #include <stdio.h>
 
-#define FLASH_START   0x00000000
-#define FLASH_SIZE    0x00010000
-#define RAM_START     0x20000000
-#define RAM_SIZE      0x00002000
-#define PERIPH_START  0x30000000
-#define PERIPH_SIZE   0x00000008
+#define FLASH_START                       0x00000000
+#define FLASH_SIZE                        0x00010000
+#define RAM_START                         0x20000000
+#define RAM_SIZE                          0x00002000
+#define PERIPH_START                      0x30000000
+#define PERIPH_SIZE                       0x00000008
+
+#define OP_SIZE_BYTE                      0b00
+#define OP_SIZE_HALF_WORD                 0b01
+#define OP_SIZE_WORD                      0b10
 
 #define ARRAY_LENGTH(ARR) ((sizeof(ARR)) / sizeof(*(ARR)))
 #define BIT(VAL, POS) \
@@ -132,56 +136,47 @@ static void periph_write_byte_func(uint32_t offset, uint8_t data) {
   }
 }
 
-svBit mem_get_fault(int addr_val, svBit op_h, svBit op_l, svBit is_write) {
-  const uint32_t addr = (uint32_t)addr_val;
-  if ((op_h & (BIT(addr, 1) | BIT(addr, 0))) | (op_l & BIT(addr, 0))) {
-    // Address misaligned
-    return 1;
-  }
+static bool is_valid_addr(uint32_t addr, bool is_write) {
   const mem_region_t* region = get_region(addr);
-  if (!region || (is_write && !region->write_byte_func) || (!is_write && !region->read_byte_func)) {
-    // Access fault
-    return 1;
+  if (!region) {
+    return false;
+  } else if (is_write && !region->write_byte_func) {
+    return false;
+  } else if (!is_write && !region->read_byte_func) {
+    return false;
   }
-  return 0;
+  return true;
 }
 
-int mem_get_read_result(int addr_val, int write_val, svBit op_h, svBit op_l, svBit is_write, svBit is_unsigned) {
-  static uint32_t read_result;
-  if (mem_get_fault(addr_val, op_h, op_l, is_write)) {
+void mem_get_access_fault_dpi_c(const svBitVecVal* addr, svBit is_write, svBit* result) {
+  *result = !is_valid_addr(*addr, is_write);
+}
+
+int mem_get_read_result_dpi_c(svBit enable, const svBitVecVal* addr, const svBitVecVal* write_val, const svBitVecVal* op_size, svBit is_write) {
+  if (!enable || !is_valid_addr(*addr, is_write)) {
+    return 0;
+  }
+  if (is_write) {
+    mem_write_byte(*addr, *write_val & 0xff);
+    if (*op_size >= OP_SIZE_HALF_WORD) {
+      mem_write_byte(*addr + 1, (*write_val >> 8) & 0xff);
+    }
+    if (*op_size == OP_SIZE_WORD) {
+      mem_write_byte(*addr + 2, (*write_val >> 16) & 0xff);
+      mem_write_byte(*addr + 3, (*write_val >> 24) & 0xff);
+    }
+    return 0;
+  } else {
+    uint32_t read_result = mem_read_byte(*addr);
+    if (*op_size >= OP_SIZE_HALF_WORD) {
+      read_result |= (mem_read_byte(*addr + 1) << 8);
+    }
+    if (*op_size == OP_SIZE_WORD) {
+      read_result |= (mem_read_byte(*addr + 2) << 16);
+      read_result |= (mem_read_byte(*addr + 3) << 24);
+    }
     return read_result;
   }
-  const uint32_t addr = (uint32_t)addr_val;
-  if (is_write) {
-    const uint32_t write_data = (uint32_t)write_val;
-    mem_write_byte(addr, write_data & 0xff);
-    if (op_l || op_h) {
-      mem_write_byte(addr + 1, (write_data >> 8) & 0xff);
-    }
-    if (op_h) {
-      mem_write_byte(addr + 2, (write_data >> 16) & 0xff);
-      mem_write_byte(addr + 3, (write_data >> 24) & 0xff);
-    }
-  } else {
-    read_result = mem_read_byte(addr);
-    if (op_l || op_h) {
-      read_result |= (mem_read_byte(addr + 1) << 8);
-    }
-    if (op_h) {
-      read_result |= (mem_read_byte(addr + 2) << 16);
-      read_result |= (mem_read_byte(addr + 3) << 24);
-    }
-    if (!op_h && !op_l) {
-      if (!is_unsigned && (read_result & 0x80)) {
-        read_result |= 0xFFFFFF00;
-      }
-    } else if (!op_h && op_l) {
-      if (!is_unsigned && (read_result & 0x8000)) {
-        read_result |= 0xFFFF0000;
-      }
-    }
-  }
-  return read_result;
 }
 
 uint32_t mem_read(uint32_t addr) {

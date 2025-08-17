@@ -2,7 +2,7 @@
 `define __DFF_STAGES_SV__
 
 `include "dff.sv"
-`include "../stages.sv"
+`include "../constants/stages.sv"
 
 module dff_stages (
     input logic clk, // Clock
