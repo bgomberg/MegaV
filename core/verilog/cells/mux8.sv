@@ -2,7 +2,7 @@
 `define __MUX8_SV__
 
 /*
- * 8:3 MUX
+ * 8:1 MUX
  */
 module mux8 #(
     parameter BITS = 1
