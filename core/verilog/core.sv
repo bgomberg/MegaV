@@ -84,10 +84,11 @@ module core(
         .select(stage_active_n[`STAGE_FETCH]),
         .out(mem_op_size)
     );
+    logic [31:0] mem_computed_addr;
     wire [31:0] mem_addr;
     mux2 #(.BITS(32)) mem_addr_mux(
         .a(pc_pc),
-        .b(alu_out),
+        .b(mem_computed_addr),
         .select(stage_active_n[`STAGE_FETCH]),
         .out(mem_addr)
     );
@@ -189,7 +190,6 @@ module core(
 
     /* ALU */
     logic [31:0] ex_alu_out;
-    wire [31:0] alu_out /* verilator public */;
     wire [31:0] alu_in_a;
     mux2 #(.BITS(32)) alu_in_a_mux(
         .a(rf_read_data_a),
@@ -213,21 +213,27 @@ module core(
         .b(decode_ex_alu_microcode[4:0]),
         .out(alu_op)
     );
-    wire alu_enable_n = stage_active_n[`STAGE_FETCH] & stage_active_n[`STAGE_WRITE_BACK] & (stage_active_n[`STAGE_EXECUTE] | ~decode_ex_alu_microcode[5]);
+    wire [31:0] alu_out /* verilator public */;
+    wire alu_fault_raw;
     (* keep *) alu alu_module(
-        .clk(clk),
-        .reset_n(reset_n),
-        .enable_n(alu_enable_n),
         .op(alu_op),
         .in_a(alu_in_a),
         .in_b(alu_in_b),
         .out(alu_out),
-        .fault(alu_fault)
+        .fault(alu_fault_raw)
+    );
+    wire alu_enable_n = stage_active_n[`STAGE_FETCH] & stage_active_n[`STAGE_WRITE_BACK] & (stage_active_n[`STAGE_EXECUTE] | ~decode_ex_alu_microcode[5]);
+    dffe fault_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(alu_enable_n),
+        .in(alu_fault_raw),
+        .out(alu_fault)
     );
     dffe #(.BITS(32)) pc_next_pc_dffe(
         .clk(clk),
         .clear_n(reset_n),
-        .enable_n(stage_active_n[`STAGE_DECODE]),
+        .enable_n(stage_active_n[`STAGE_FETCH]),
         .in(alu_out),
         .out(pc_next_pc)
     );
@@ -244,6 +250,13 @@ module core(
         .enable_n(stage_active_n[`STAGE_WRITE_BACK]),
         .in(alu_out),
         .out(pc_offset_pc)
+    );
+    dffe #(.BITS(32)) mem_computed_addr_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(stage_active_n[`STAGE_EXECUTE]),
+        .in(alu_out),
+        .out(mem_computed_addr)
     );
 
     /* CSR */

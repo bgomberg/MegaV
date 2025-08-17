@@ -1,6 +1,7 @@
 `include "adder32.sv"
 `include "shifter.sv"
 `include "cells/and2.sv"
+`include "cells/nand8.sv"
 `include "cells/dffe.sv"
 `include "cells/or2.sv"
 `include "cells/nor4.sv"
@@ -10,14 +11,11 @@
  * An ALU which can perform all the math operations (opcodes 0b0010011 and 0b0110011) of the RV31I/E instruction set.
  */
 module alu(
-    input logic clk, // Clock signal
-    input logic reset_n, // Reset signal (active low)
-    input logic enable_n, // Enable (active low)
-    input logic [4:0] op, // Operation to be performed
-    input logic [31:0] in_a, // Input data (bus A)
-    input logic [31:0] in_b, // Input data (bus B)
-    output logic [31:0] out, // Output data
-    output logic fault // Invalid operation
+    input [4:0] op, // Operation to be performed
+    input [31:0] in_a, // Input data (bus A)
+    input [31:0] in_b, // Input data (bus B)
+    output [31:0] out, // Output data
+    output fault // Invalid operation
 );
 
     /* Op decoding */
@@ -89,10 +87,28 @@ module alu(
         .d(xor_result[31:24]),
         .out(xor_result_nibble_is_zero)
     );
-    wire eq_result = (xor_result_nibble_is_zero == 8'b11111111);
+    wire eq_result_n;
+    nand8 eq_result_nand(
+        .a(xor_result_nibble_is_zero[0]),
+        .b(xor_result_nibble_is_zero[1]),
+        .c(xor_result_nibble_is_zero[2]),
+        .d(xor_result_nibble_is_zero[3]),
+        .e(xor_result_nibble_is_zero[4]),
+        .f(xor_result_nibble_is_zero[5]),
+        .g(xor_result_nibble_is_zero[6]),
+        .h(xor_result_nibble_is_zero[7]),
+        .out(eq_result_n)
+    );
     wire sign_cmp_result = (in_a[31] ^ op_branch_slt_is_unsigned) & ~(in_b[31] ^ op_branch_slt_is_unsigned);
-    wire lt_ltu_result = sign_cmp_result | (~(in_a[31] ^ in_b[31]) & adder_sum[31] & ~eq_result);
-    wire branch_slt_sltu_result = (op_is_branch_eq_ne ? eq_result : lt_ltu_result) ^ op_is_branch_gt;
+    wire lt_ltu_result = sign_cmp_result | (~(in_a[31] ^ in_b[31]) & adder_sum[31] & eq_result_n);
+    wire eq_lt_ltu_result;
+    mux2 eq_lt_ltu_result_mux(
+        .a(lt_ltu_result),
+        .b(~eq_result_n),
+        .select(op_is_branch_eq_ne),
+        .out(eq_lt_ltu_result)
+    );
+    wire branch_slt_sltu_result = eq_lt_ltu_result ^ op_is_branch_gt;
 
     /* Result */
     wire op_is_arith_xor = op_is_arith | op_is_xor;
@@ -133,107 +149,82 @@ module alu(
         .select(op_is_arith_xor_and_or),
         .out(result)
     );
-    dffe #(.BITS(32)) out_dffe(
-        .clk(clk),
-        .clear_n(reset_n),
-        .enable_n(enable_n),
-        .in(result),
-        .out(out)
-    );
-    dffe fault_dffe(
-        .clk(clk),
-        .clear_n(reset_n),
-        .enable_n(enable_n),
-        .in(is_invalid_op),
-        .out(fault)
-    );
+
+    assign out = result;
+    assign fault = is_invalid_op;
 
 `ifdef FORMAL
-    initial assume(~reset_n);
-    logic f_past_valid;
-    initial f_past_valid = 0;
-    always_ff @(posedge clk) begin
-        f_past_valid = 1;
-    end
-
     /* Validate logic */
-    always_ff @(posedge clk) begin
-        if (f_past_valid) begin
-            if ($past(~reset_n)) begin
+    always_comb begin
+        case (op)
+            5'b0000: begin // ADD
                 assert(!fault);
-            end else begin
-                assume($past(~enable_n));
-                case ($past(op))
-                    5'b0000: begin // ADD
-                        assert(!fault);
-                        assert(out == ($past(in_a) + $past(in_b)));
-                    end
-                    5'b00001: begin // SLL
-                        assert(!fault);
-                        assert(out == ($past(in_a) << $past(in_b[4:0])));
-                    end
-                    5'b00010: begin // SLT
-                        assert(!fault);
-                        assert(out == (($signed($past(in_a)) < $signed($past(in_b))) ? 1 : 0));
-                    end
-                    5'b00011: begin // SLTU
-                        assert(!fault);
-                        assert(out == (($past(in_a) < $past(in_b)) ? 1 : 0));
-                    end
-                    5'b00100: begin // XOR
-                        assert(!fault);
-                        assert(out == ($past(in_a) ^ $past(in_b)));
-                    end
-                    5'b00101: begin // SRL
-                        assert(!fault);
-                        assert(out == ($past(in_a) >> $past(in_b[4:0])));
-                    end
-                    5'b00110: begin // OR
-                        assert(!fault);
-                        assert(out == ($past(in_a) | $past(in_b)));
-                    end
-                    5'b00111: begin // AND
-                        assert(!fault);
-                        assert(out == ($past(in_a) & $past(in_b)));
-                    end
-                    5'b01000: begin // SUB
-                        assert(!fault);
-                        assert(out == ($past(in_a) - $past(in_b)));
-                    end
-                    5'b01101: begin // SRA
-                        assert(!fault);
-                        assert($signed(out) == ($signed($past(in_a)) >>> $past(in_b[4:0])));
-                    end
-                    5'b10000: begin // BEQ
-                        assert(!fault);
-                        assert(out == (($past(in_a) == $past(in_b)) ? 1'b1 : 1'b0));
-                    end
-                    5'b10001: begin // BNE
-                        assert(!fault);
-                        assert(out == (($past(in_a) != $past(in_b)) ? 1'b1 : 1'b0));
-                    end
-                    5'b10100: begin // BLT
-                        assert(!fault);
-                        assert(out == (($signed($past(in_a)) < $signed($past(in_b))) ? 1'b1 : 1'b0));
-                    end
-                    5'b10101: begin // BGE
-                        assert(!fault);
-                        assert(out == (($signed($past(in_a)) >= $signed($past(in_b))) ? 1'b1 : 1'b0));
-                    end
-                    5'b10110: begin // BLTU
-                        assert(!fault);
-                        assert(out == (($past(in_a) < $past(in_b)) ? 1'b1 : 1'b0));
-                    end
-                    5'b10111: begin // BGEU
-                        assert(!fault);
-                        assert(out == (($past(in_a) >= $past(in_b)) ? 1'b1 : 1'b0));
-                    end
-                    default: begin
-                        assert(fault);
-                    end
-                endcase
+                assert(out == (in_a + in_b));
             end
-        end
+            5'b00001: begin // SLL
+                assert(!fault);
+                assert(out == (in_a << in_b[4:0]));
+            end
+            5'b00010: begin // SLT
+                assert(!fault);
+                assert(out == (($signed(in_a) < $signed(in_b)) ? 1 : 0));
+            end
+            5'b00011: begin // SLTU
+                assert(!fault);
+                assert(out == ((in_a < in_b) ? 1 : 0));
+            end
+            5'b00100: begin // XOR
+                assert(!fault);
+                assert(out == (in_a ^ in_b));
+            end
+            5'b00101: begin // SRL
+                assert(!fault);
+                assert(out == (in_a >> in_b[4:0]));
+            end
+            5'b00110: begin // OR
+                assert(!fault);
+                assert(out == (in_a | in_b));
+            end
+            5'b00111: begin // AND
+                assert(!fault);
+                assert(out == (in_a & in_b));
+            end
+            5'b01000: begin // SUB
+                assert(!fault);
+                assert(out == (in_a - in_b));
+            end
+            5'b01101: begin // SRA
+                assert(!fault);
+                assert($signed(out) == ($signed(in_a) >>> in_b[4:0]));
+            end
+            5'b10000: begin // BEQ
+                assert(!fault);
+                assert(out == ((in_a == in_b) ? 1'b1 : 1'b0));
+            end
+            5'b10001: begin // BNE
+                assert(!fault);
+                assert(out == ((in_a != in_b) ? 1'b1 : 1'b0));
+            end
+            5'b10100: begin // BLT
+                assert(!fault);
+                assert(out == (($signed(in_a) < $signed(in_b)) ? 1'b1 : 1'b0));
+            end
+            5'b10101: begin // BGE
+                assert(!fault);
+                assert(out == (($signed(in_a) >= $signed(in_b)) ? 1'b1 : 1'b0));
+            end
+            5'b10110: begin // BLTU
+                assert(!fault);
+                assert(out == ((in_a < in_b) ? 1'b1 : 1'b0));
+            end
+            5'b10111: begin // BGEU
+                assert(!fault);
+                assert(out == ((in_a >= in_b) ? 1'b1 : 1'b0));
+            end
+            default: begin
+                assert(fault);
+            end
+        endcase
     end
 `endif
 

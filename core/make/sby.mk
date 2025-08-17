@@ -11,6 +11,7 @@ SBY_MODULES := \
 	adder32 \
 	shifter \
 	and2 \
+	nand8 \
 	or2 \
 	nor2 \
 	nor4 \
