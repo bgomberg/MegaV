@@ -1,3 +1,4 @@
+`include "cells/and2.sv"
 `include "cells/dff.sv"
 `include "cells/dffe.sv"
 `include "cells/external_memory.sv"
@@ -26,20 +27,19 @@ module memory(
     input logic [31:0] addr /* verilator public */, // Address to access
     input logic [31:0] in /* verilator public */, // Input data
     output logic [31:0] out, // Output data
-    output logic op_fault, // Invalid op fault
-    output logic addr_fault, // Misaligned address fault
-    output logic access_fault_n // Access fault (active low)
+    output logic [2:0] fault_num // Fault number
 );
 
-    /* Size Decode */
+    /* Decode */
     wire op_size_is_byte = ~op_size[1] & ~op_size[0];
     wire op_size_is_half_word = ~op_size[1] & op_size[0];
     wire op_size_is_word = op_size[1] & ~op_size[0];
     wire op_size_is_invalid = op_size[1] & op_size[0];
     wire addr_is_misaligned = (op_size_is_word & (addr[1] | addr[0])) | (op_size_is_half_word & addr[0]);
+    wire misaligned_fault = op_size_is_invalid | addr_is_misaligned;
 
     /* External Memory */
-    wire active = reset_n & ~enable_n & ~addr_is_misaligned & ~op_size_is_invalid;
+    wire active = reset_n & ~enable_n & ~misaligned_fault;
     wire [31:0] out_data;
     wire next_access_fault;
     external_memory external_mem(
@@ -81,26 +81,23 @@ module memory(
     );
 
     /* Fault */
-    wire access_fault;
-    dffe access_fault_dffe(
-        .clk(clk),
-        .clear_n(reset_n),
-        .enable_n(enable_n),
-        .in(next_access_fault),
-        .out(access_fault)
+    wire [2:0] next_fault_num_intermediate = {
+        misaligned_fault | next_access_fault,
+        is_write,
+        ~misaligned_fault & next_access_fault
+    };
+    wire [2:0] next_fault_num;
+    and2 #(.BITS(3)) next_fault_num_and(
+        .a(next_fault_num_intermediate),
+        .b({3{~enable_n}}),
+        .out(next_fault_num)
     );
-    assign access_fault_n = ~access_fault;
-    dff addr_fault_dffe(
+    // TODO: Can we use dffe here instead?
+    dff #(.BITS(3)) fault_num_dff(
         .clk(clk),
         .clear_n(reset_n),
-        .in(~enable_n & addr_is_misaligned),
-        .out(addr_fault)
-    );
-    dff op_fault_dffe(
-        .clk(clk),
-        .clear_n(reset_n),
-        .in(~enable_n & op_size_is_invalid),
-        .out(op_fault)
+        .in(next_fault_num),
+        .out(fault_num)
     );
 
 `ifdef FORMAL
@@ -122,38 +119,31 @@ module memory(
                 assume($stable(in));
             end
             if ($past(~reset_n)) begin
-                assert(~op_fault);
-                assert(~addr_fault);
-                assert(access_fault_n);
+                assert(~fault_num[2]);
             end else if ($past(~enable_n) & ~enable_n) begin
                 case ($past(op_size))
                     `MEM_OP_SIZE_BYTE: begin
-                        assert(~op_fault);
-                        assert(~addr_fault);
-                        assert(access_fault_n);
+                        assert(~fault_num[2]);
                     end
                     `MEM_OP_SIZE_HALF_WORD: begin
-                        assert(~op_fault);
                         if ($past(addr[0])) begin
-                            assert(access_fault_n);
-                            assert(addr_fault);
+                            if ($past(is_write))
+                                assert(fault_num == 3'b110);
+                            else
+                                assert(fault_num == 3'b100);
                         end else begin
-                            assert(access_fault_n);
-                            assert(~addr_fault);
+                            assert(~fault_num[2]);
                         end
                     end
                     `MEM_OP_SIZE_WORD: begin
-                        assert(~op_fault);
                         if ($past(addr[1:0])) begin
-                            assert(access_fault_n);
-                            assert(addr_fault);
+                            if ($past(is_write))
+                                assert(fault_num == 3'b110);
+                            else
+                                assert(fault_num == 3'b100);
                         end else begin
-                            assert(access_fault_n);
-                            assert(~addr_fault);
+                            assert(~fault_num[2]);
                         end
-                    end
-                    default: begin
-                        assert(op_fault);
                     end
                 endcase
             end

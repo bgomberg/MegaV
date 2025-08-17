@@ -14,9 +14,7 @@ module fsm(
     input logic clk, // Clock signal
     input logic reset_n, // Reset signal (active low)
     input logic illegal_instr_fault, // Illegal instruction fault
-    input logic mem_addr_fault, // Memory address fault
-    input logic mem_access_fault, // Memory access fault
-    input logic mem_fault_is_store, // Memory fault is related to a store operation
+    input logic [2:0] mem_fault_num, // Memory fault number
     input logic ext_int, // External interrupt
     input logic sw_int, // Software interrupt
     output logic [`NUM_STAGES-1:0] stage_active_n, // Current stage (active low)
@@ -57,15 +55,15 @@ module fsm(
 
     /* Fault / Fault Number */
     logic fault;
-    wire mem_fault = mem_addr_fault | mem_access_fault;
+    wire mem_fault = mem_fault_num[2];
     wire fetch_stage_mem_fault = mem_fault & ~stage_active_n[`STAGE_FETCH];
     wire mem_stage_mem_fault = mem_fault & ~stage_active_n[`STAGE_MEMORY];
     wire non_control_stage_instr_fault = stage_active_n[`STAGE_CONTROL] & illegal_instr_fault;
     wire active_fault = in_progress & (fetch_stage_mem_fault | mem_stage_mem_fault | non_control_stage_instr_fault);
     wire [2:0] next_fault_num = {
         mem_stage_mem_fault & ~non_control_stage_instr_fault,
-        (mem_stage_mem_fault & mem_fault_is_store) | non_control_stage_instr_fault,
-        ~non_control_stage_instr_fault & ~mem_addr_fault & mem_access_fault
+        (mem_stage_mem_fault & mem_fault_num[1]) | non_control_stage_instr_fault,
+        ~non_control_stage_instr_fault & mem_fault_num[0]
     };
     dffe fault_dff(
         .clk(clk),
@@ -123,21 +121,21 @@ module fsm(
                 if ($past(illegal_instr_fault) && !$past(stage_active[`STAGE_CONTROL])) begin
                     assert(stage_active == (1 << 0));
                     assert(fault_num == `FSM_FAULT_NUM_ILLEGAL_INSTR);
-                end else if ($past(mem_addr_fault) && $past(stage_active[`STAGE_FETCH])) begin
+                end else if ($past(mem_fault_num[2] & ~mem_fault_num[0]) && $past(stage_active[`STAGE_FETCH])) begin
                     assert(stage_active == (1 << 0));
                     assert(fault_num == `FSM_FAULT_NUM_INSTR_ADDR_MISALIGNED);
-                end else if ($past(mem_addr_fault) && $past(stage_active[`STAGE_MEMORY])) begin
+                end else if ($past(mem_fault_num[2] & ~mem_fault_num[0]) && $past(stage_active[`STAGE_MEMORY])) begin
                     assert(stage_active == (1 << 0));
-                    if ($past(mem_fault_is_store)) begin
+                    if ($past(mem_fault_num[1])) begin
                         assert(fault_num == `FSM_FAULT_NUM_STORE_ADDR_MISALIGNED);
                     end else begin
                         assert(fault_num == `FSM_FAULT_NUM_LOAD_ADDR_MISALIGNED);
                     end
-                end else if ($past(mem_access_fault) && $past(stage_active[`STAGE_FETCH])) begin
+                end else if ($past(mem_fault_num[2] & mem_fault_num[0]) && $past(stage_active[`STAGE_FETCH])) begin
                     assert(fault_num == `FSM_FAULT_NUM_INSTR_ACCESS_FAULT);
-                end else if ($past(mem_access_fault) && $past(stage_active[`STAGE_MEMORY])) begin
+                end else if ($past(mem_fault_num[2] & mem_fault_num[0]) && $past(stage_active[`STAGE_MEMORY])) begin
                     assert(stage_active == (1 << 0));
-                    if ($past(mem_fault_is_store)) begin
+                    if ($past(mem_fault_num[1])) begin
                         assert(fault_num == `FSM_FAULT_NUM_STORE_ACCESS_FAULT);
                     end else begin
                         assert(fault_num == `FSM_FAULT_NUM_LOAD_ACCESS_FAULT);

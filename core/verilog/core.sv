@@ -31,14 +31,12 @@ module core(
     wire control_op_ext_int = ~control_op[1] & control_op[0];
     wire control_op_sw_int = control_op[1] & ~control_op[0];
     logic [2:0] fault_num /* verilator public */;
-    wire fsm_illegal_instr_fault = decode_fault | mem_op_fault | alu_fault | csr_fault;
+    wire fsm_illegal_instr_fault = decode_fault | alu_fault | csr_fault;
     (* keep *) fsm fsm_module(
         .clk(clk),
         .reset_n(reset_n),
         .illegal_instr_fault(fsm_illegal_instr_fault),
-        .mem_addr_fault(mem_addr_fault),
-        .mem_access_fault(~mem_access_fault_n),
-        .mem_fault_is_store(decode_ma_mem_microcode[3]),
+        .mem_fault_num(mem_fault_num),
         .ext_int(csr_ext_int_pending),
         .sw_int(csr_sw_int_pending),
         .stage_active_n(stage_active_n),
@@ -78,9 +76,7 @@ module core(
 
     /* Memory */
     wire [31:0] mem_out /* verilator public */;
-    wire mem_op_fault /* verilator public */;
-    wire mem_addr_fault /* verilator public */;
-    wire mem_access_fault_n /* verilator public */;
+    wire [2:0] mem_fault_num /* verilator public */;
     wire [1:0] mem_op_size;
     mux2 #(.BITS(2)) mem_op_size_mux(
         .a(2'b10),
@@ -108,9 +104,7 @@ module core(
         .addr(mem_addr),
         .in(rf_read_data_b),
         .out(mem_out),
-        .op_fault(mem_op_fault),
-        .addr_fault(mem_addr_fault),
-        .access_fault_n(mem_access_fault_n)
+        .fault_num(mem_fault_num)
     );
 
     /* Instruction decode */
