@@ -31,7 +31,7 @@ module core(
     wire control_op_ext_int = ~control_op[1] & control_op[0];
     wire control_op_sw_int = control_op[1] & ~control_op[0];
     logic [2:0] fault_num /* verilator public */;
-    wire fsm_illegal_instr_fault = decode_fault | alu_fault | csr_fault;
+    wire fsm_illegal_instr_fault = decode_fault | csr_fault;
     (* keep *) fsm fsm_module(
         .clk(clk),
         .reset_n(reset_n),
@@ -115,7 +115,7 @@ module core(
     wire [1:0] decode_csr_mux_position /* verilator public */;
     wire [1:0] decode_wb_mux_position /* verilator public */;
     wire [7:0] decode_rd_rf_microcode /* verilator public */;
-    wire [5:0] decode_ex_alu_microcode /* verilator public */;
+    wire [9:0] decode_ex_alu_microcode /* verilator public */;
     wire [15:0] decode_ex_csr_microcode /* verilator public */;
     wire [3:0] decode_ma_mem_microcode /* verilator public */;
     /* verilator lint_off UNOPT */
@@ -157,7 +157,7 @@ module core(
     mux2 #(.BITS(32)) ex_out_mux(
         .a(csr_read_value),
         .b(ex_alu_out),
-        .select(decode_ex_alu_microcode[5]),
+        .select(decode_ex_alu_microcode[9]),
         .out(ex_out)
     );
     wire [31:0] rf_write_data /* verilator public */;
@@ -206,29 +206,19 @@ module core(
         .select({stage_active_n[`STAGE_FETCH], ~stage_active_n[`STAGE_WRITE_BACK] | decode_alu_b_mux_position}),
         .out(alu_in_b)
     );
-    wire alu_fault;
-    wire [4:0] alu_op;
-    and2 #(.BITS(5)) alu_op_and(
-        .a({5{~stage_active_n[`STAGE_EXECUTE]}}),
-        .b(decode_ex_alu_microcode[4:0]),
-        .out(alu_op)
+    wire [8:0] alu_microcode;
+    mux2 #(.BITS(9)) alu_microcode_mux(
+        .a(decode_ex_alu_microcode[8:0]),
+        .b(9'b0),
+        .select(stage_active_n[`STAGE_EXECUTE]),
+        .out(alu_microcode)
     );
     wire [31:0] alu_out /* verilator public */;
-    wire alu_fault_raw;
     (* keep *) alu alu_module(
-        .op(alu_op),
+        .microcode(alu_microcode),
         .in_a(alu_in_a),
         .in_b(alu_in_b),
-        .out(alu_out),
-        .fault(alu_fault_raw)
-    );
-    wire alu_enable_n = stage_active_n[`STAGE_FETCH] & stage_active_n[`STAGE_WRITE_BACK] & (stage_active_n[`STAGE_EXECUTE] | ~decode_ex_alu_microcode[5]);
-    dffe fault_dffe(
-        .clk(clk),
-        .clear_n(reset_n),
-        .enable_n(alu_enable_n),
-        .in(alu_fault_raw),
-        .out(alu_fault)
+        .out(alu_out)
     );
     dffe #(.BITS(32)) pc_next_pc_dffe(
         .clk(clk),

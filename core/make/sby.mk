@@ -13,6 +13,7 @@ SBY_MODULES := \
 	and2 \
 	nand8 \
 	or2 \
+	or4 \
 	nor2 \
 	nor4 \
 	mux2 \

@@ -3,7 +3,6 @@
 /*
  * Program counter.
  */
-/* verilator lint_off UNUSED */
 module program_counter(
     input logic clk, // Clock signal
     input logic reset_n, // Reset signal (active low)

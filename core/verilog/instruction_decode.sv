@@ -1,6 +1,9 @@
+`include "constants/alu_microcode.sv"
 `include "cells/and2.sv"
 `include "cells/dffe.sv"
 `include "cells/mux2.sv"
+`include "cells/mux4.sv"
+`include "cells/or4.sv"
 
 /*
  * A decoder for the RV32I instruction set.
@@ -18,7 +21,7 @@ module instruction_decode(
     /* verilator lint_off UNOPTFLAT */
     output logic [8:0] rd_rf_microcode, // Read stage register file microcode
     /* verilator lint_on UNOPTFLAT */
-    output logic [5:0] ex_alu_microcode, // Execute stage ALU microcode
+    output logic [9:0] ex_alu_microcode, // Execute stage ALU microcode
     output logic [4:0] ma_mem_microcode, // Memory access stage memory microcode
     output logic [15:0] ex_csr_microcode, // Execute stage CSR microcode
     output logic [4:0] wb_rf_microcode, // Write back stage register file microcode
@@ -33,17 +36,17 @@ module instruction_decode(
     wire [4:0] rs1 = instr[19:15];
     wire [4:0] rs2 = instr[24:20];
     wire [6:0] funct7 = instr[31:25];
-    wire opcode_is_op = ~opcode[6] & opcode[5] & opcode[4] & ~opcode[2];
-    wire opcode_is_opimm = ~opcode[5] & opcode[4] & ~opcode[2];
-    wire opcode_is_load = ~opcode[5] & ~opcode[4] & ~opcode[3];
-    wire opcode_is_store = ~opcode[6] & opcode[5] & ~opcode[4];
-    wire opcode_is_auipc = ~opcode[5] & ~opcode[3] & opcode[2];
-    wire opcode_is_branch = opcode[6] & ~opcode[4] & ~opcode[2];
-    wire opcode_is_jal = opcode[5] & opcode[3];
-    wire opcode_is_jalr = ~opcode[4] & ~opcode[3] & opcode[2];
-    wire opcode_is_lui = ~opcode[6] & opcode[5] & opcode[2];
-    wire opcode_is_fence = ~opcode[6] & opcode[3];
-    wire opcode_is_system = opcode[6] & opcode[4];
+    wire opcode_is_arith_reg = ~opcode[6] & opcode[5] & opcode[4] & ~opcode[2]; // ADD / SUB / SLL / SLT / SLTU / XOR / SRL / SRA / OR / AND
+    wire opcode_is_arith_imm = ~opcode[5] & opcode[4] & ~opcode[2]; // ADDI / SLTI / SLTIU / XORI / ORI / ANDI
+    wire opcode_is_branch = opcode[6] & ~opcode[4] & ~opcode[2]; // BEQ / BNE / BLT / BGE / BLTU / BGEU
+    wire opcode_is_load = ~opcode[5] & ~opcode[4] & ~opcode[3]; // LB / LH / LW / LBU / LHU
+    wire opcode_is_store = ~opcode[6] & opcode[5] & ~opcode[4]; // SB / SH / SW
+    wire opcode_is_auipc = ~opcode[5] & ~opcode[3] & opcode[2]; // AUIPC
+    wire opcode_is_jal = opcode[5] & opcode[3]; // JAL
+    wire opcode_is_jalr = ~opcode[4] & ~opcode[3] & opcode[2]; // JALR
+    wire opcode_is_lui = ~opcode[6] & opcode[5] & opcode[2]; // LUI
+    wire opcode_is_fence = ~opcode[6] & opcode[3]; // FENCE / FENCE.I
+    wire opcode_is_system = opcode[6] & opcode[4]; // ECALl / EBREAK / CSRRW / CSRRS / CSRRC / CSRRWI / CSRRSI / CSRRCI
     wire invalid_opcode = ~opcode[0] | ~opcode[1] |
         (opcode[3] & ~opcode[2]) |
         (opcode[4] & opcode[3]) |
@@ -55,12 +58,26 @@ module instruction_decode(
     wire instr_is_system_mret = instr_is_system_e_mret & funct7[4];
     wire instr_is_system_e = instr_is_system_e_mret & ~instr_is_system_mret;
     wire instr_is_system_csr = opcode_is_system & ~instr_is_system_e_mret;
+    wire invalid_funct3 =
+        (opcode_is_jalr & (funct3[0] | funct3[1] | funct3[2])) |
+        (opcode_is_store & (funct3[2] | (funct3[1] & funct3[0]))) |
+        (opcode_is_load & ((funct3[1] & funct3[0]) | (funct3[2] & funct3[1]))) |
+        (opcode_is_branch & ~funct3[2] & funct3[1]) |
+        (opcode_is_fence & (funct3[2] | funct3[1])) |
+        (opcode_is_system & funct3[2] & ~funct3[1] & ~funct3[0]);
+    wire funct7_invalid_arith_bit_set = funct7[6] | funct7[4] | funct7[3] | funct7[2] | funct7[1] | funct7[0];
+    wire invalid_funct7 =
+        (opcode_is_arith_reg & (funct7_invalid_arith_bit_set | (funct3[1] & funct7[5]) | (~funct3[2] & funct3[0] & funct7[5]) | (funct3[2] & ~funct3[0] & funct7[5]))) |
+        (opcode_is_arith_imm & ((~funct3[1] & funct3[0] & funct7_invalid_arith_bit_set) | (~funct3[2] & ~funct3[1] & funct3[0] & funct7[5]))) |
+        (opcode_is_fence & (funct7[6] | funct7[5] | funct7[4] | funct7[3] | (funct3[0] & (funct7[2] | funct7[1] | funct7[0])))) |
+        (instr_is_system_e & (funct7[6] | funct7[5] | funct7[4] | funct7[3] | funct7[2] | funct7[1] | funct7[0])) |
+        (instr_is_system_mret & (funct7[6] | funct7[5] | ~funct7[4] | ~funct7[3] | funct7[2] | funct7[1] | funct7[0]));
 
     /* Read Stage */
     wire rd_rf_enable = ~(opcode_is_lui | opcode_is_auipc | opcode_is_jal | opcode_is_fence | opcode_is_system) |
         (instr_is_system_csr & ~funct3[2]);
     wire rs1_is_zero = ~rs1[4] & ~rs1[3] & ~rs1[2] & ~rs1[1] & ~rs1[0];
-    wire invalid_rs = (rd_rf_enable & (rs1[4] | ((opcode_is_op | opcode_is_store | opcode_is_branch) & rs2[4]))) |
+    wire invalid_rs = (rd_rf_enable & (rs1[4] | ((opcode_is_arith_reg | opcode_is_store | opcode_is_branch) & rs2[4]))) |
         (opcode_is_fence & (~rs1_is_zero | (funct3[0] & (rs2 != 5'b0)))) |
         (instr_is_system_e & (~rs1_is_zero | rs2[4] | rs2[3] | rs2[2] | rs2[1])) |
         (instr_is_system_mret & (~rs1_is_zero | rs2[4] | rs2[3] | rs2[2] | ~rs2[1] | rs2[0]));
@@ -78,42 +95,49 @@ module instruction_decode(
     );
 
     /* Execute Stage */
-    wire invalid_funct3 = (opcode_is_store & funct3[2]) |
-        (opcode_is_jalr & funct3[0]) |
-        (opcode_is_jalr & funct3[1]) |
-        (opcode_is_jalr & funct3[2]) |
-        (opcode_is_store & funct3[1] & funct3[0]) |
-        (opcode_is_load & funct3[1] & funct3[0]) |
-        (opcode_is_load & funct3[2] & funct3[1]) |
-        (opcode_is_branch & ~funct3[2] & funct3[1]) |
-        (opcode_is_fence & (funct3[2] | funct3[1])) |
-        (opcode_is_system & funct3[2] & ~funct3[1] & ~funct3[0]);
-    wire funct7_invalid_op_opimm_bit_set = funct7[6] | funct7[4] | funct7[3] | funct7[2] | funct7[1] | funct7[0];
-    wire invalid_funct7 = (opcode_is_op & funct7_invalid_op_opimm_bit_set) |
-        (opcode_is_op & funct3[1] & funct7[5]) |
-        (opcode_is_opimm & ~funct3[1] & funct3[0] & funct7_invalid_op_opimm_bit_set) |
-        (opcode_is_op & ~funct3[2] & funct3[0] & funct7[5]) |
-        (opcode_is_op & funct3[2] & ~funct3[0] & funct7[5]) |
-        (opcode_is_opimm & ~funct3[2] & ~funct3[1] & funct3[0] & funct7[5]) |
-        (opcode_is_fence & (funct7[6] | funct7[5] | funct7[4] | funct7[3])) |
-        (opcode_is_fence & funct3[0] & (funct7[2] | funct7[1] | funct7[0])) |
-        (instr_is_system_e & (funct7[6] | funct7[5] | funct7[4] | funct7[3] | funct7[2] | funct7[1] | funct7[0])) |
-        (instr_is_system_mret & (funct7[6] | funct7[5] | ~funct7[4] | ~funct7[3] | funct7[2] | funct7[1] | funct7[0]));
-    wire [5:0] next_ex_alu_microcode = {
-        ~invalid_instr & (opcode_is_op | opcode_is_opimm | opcode_is_branch | opcode_is_load | opcode_is_store | opcode_is_auipc |
-            opcode_is_jalr),
-        opcode_is_branch,
-        funct7[5] & ~funct3[1] & (opcode_is_op | opcode_is_opimm) & (opcode_is_op | funct3[2]) &
-            (funct3[2] | ~funct3[0]) & (~funct3[2] | funct3[0]),
-        ({3{opcode_is_op | opcode_is_opimm | opcode_is_branch}} & funct3)
-    };
-    dffe #(.BITS(6)) ex_alu_microcode_dffe(
+    wire ex_alu_microcode_is_arith = opcode_is_arith_imm | opcode_is_arith_reg;
+    wire ex_alu_microcode_is_arith_branch = ex_alu_microcode_is_arith | opcode_is_branch;
+    wire ex_alu_enable = ~invalid_instr &
+        (ex_alu_microcode_is_arith_branch | opcode_is_load | opcode_is_store | opcode_is_auipc | opcode_is_jalr);
+    wire ex_alu_temp = funct7[5] & ~funct3[1] & ex_alu_microcode_is_arith & (opcode_is_arith_reg | funct3[2]) &
+        (funct3[2] | ~funct3[0]) & (~funct3[2] | funct3[0]);
+    wire ex_alu_microcode_is_beq_bne = opcode_is_branch & ~funct3[2];
+    wire ex_alu_microcode_is_bge_bgeu_bne = opcode_is_branch & funct3[0];
+    wire ex_alu_microcode_is_sltu_bltu = (opcode_is_branch & funct3[1]) | (~opcode_is_branch & funct3[1] & funct3[0]);
+    wire [1:0] ex_alu_microcode_shifter_op = {funct3[2] & ex_alu_temp, funct3[2]};
+    wire [2:0] ex_alu_microcode_output;
+    mux4 #(.BITS(3)) ex_alu_microcode_output_mux(
+        .d1(3'b000),
+        .d2(3'b010),
+        .d3(funct3),
+        .d4(3'b010),
+        .select({ex_alu_microcode_is_arith, opcode_is_branch}),
+        .out(ex_alu_microcode_output)
+    );
+    wire ex_alu_microcode_is_add_n;
+    or4 ex_alu_microcode_is_add_n_or(
+        .a(opcode_is_branch),
+        .b(ex_alu_temp),
+        .c(ex_alu_microcode_output[1]),
+        .d(ex_alu_microcode_output[0]),
+        .out(ex_alu_microcode_is_add_n)
+    );
+    dffe #(.BITS(10)) ex_alu_microcode_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(enable_n),
-        .in(next_ex_alu_microcode),
+        .in({
+            ex_alu_enable,
+            ex_alu_microcode_is_beq_bne,
+            ex_alu_microcode_is_bge_bgeu_bne,
+            ex_alu_microcode_is_sltu_bltu,
+            ex_alu_microcode_is_add_n,
+            ex_alu_microcode_shifter_op,
+            ex_alu_microcode_output
+        }),
         .out(ex_alu_microcode)
     );
+
     wire [11:0] next_ex_csr_microcode_part;
     mux2 #(.BITS(12)) next_ex_csr_microcode_part_mux(
         .a({funct7, rs2}),
@@ -244,7 +268,7 @@ module instruction_decode(
         .in(next_alu_a_mux_position),
         .out(alu_a_mux_position)
     );
-    wire next_alu_b_mux_position = ~opcode_is_branch & ~opcode_is_op;
+    wire next_alu_b_mux_position = ~opcode_is_branch & ~opcode_is_arith_reg;
     dffe alu_b_mux_position_dffe(
         .clk(clk),
         .clear_n(reset_n),
@@ -304,13 +328,13 @@ module instruction_decode(
     /* Validate Logic */
     always_comb begin
         if (!invalid_opcode) begin
-            assert((opcode_is_op + opcode_is_opimm + opcode_is_load + opcode_is_store + opcode_is_auipc +
+            assert((opcode_is_arith_reg + opcode_is_arith_imm + opcode_is_load + opcode_is_store + opcode_is_auipc +
                 opcode_is_branch + opcode_is_jal + opcode_is_jalr + opcode_is_lui + opcode_is_fence +
                 opcode_is_system) == 1);
         end
     end
     wire has_rd_stage = rd_rf_microcode[8];
-    wire has_ex_stage = ex_alu_microcode[5] | ex_csr_microcode[15];
+    wire has_ex_stage = ex_alu_microcode[9] | ex_csr_microcode[15];
     wire has_ma_stage = ma_mem_microcode[4];
     always_ff @(posedge clk) begin
         if (f_past_valid) begin
@@ -328,7 +352,7 @@ module instruction_decode(
                             assert(!has_rd_stage && !has_ex_stage && !has_ma_stage);
                             assert(imm == {$past(instr[31:12]), 12'b0});
                             assert(wb_mux_position == 2'b01);
-                            assert(ex_alu_microcode[5] == 1'b0);
+                            assert(ex_alu_microcode[9] == 1'b0);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
                             assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
@@ -346,7 +370,8 @@ module instruction_decode(
                             assert(alu_a_mux_position == 1'b1);
                             assert(alu_b_mux_position == 1'b1);
                             assert(wb_mux_position == 2'b00);
-                            assert(ex_alu_microcode == 6'b100000);
+                            assert(ex_alu_microcode[9] == 1'b1);
+                            assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SUM) == `ALU_MICROCODE_ADD);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
                             assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
@@ -362,7 +387,7 @@ module instruction_decode(
                             assert(!has_rd_stage && !has_ex_stage && !has_ma_stage);
                             assert(imm == {{12{$past(instr[31])}}, $past(instr[19:12]), $past(instr[20]), $past(instr[30:21]), 1'b0});
                             assert(wb_mux_position == 2'b11);
-                            assert(ex_alu_microcode[5] == 1'b0);
+                            assert(ex_alu_microcode[9] == 1'b0);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
                             assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
@@ -383,7 +408,8 @@ module instruction_decode(
                             assert(alu_b_mux_position == 1'b1);
                             assert(wb_mux_position == 2'b11);
                             assert(rd_rf_microcode[7:4] == $past(instr[18:15]));
-                            assert(ex_alu_microcode == 6'b100000);
+                            assert(ex_alu_microcode[9] == 1'b1);
+                            assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SUM) == `ALU_MICROCODE_ADD);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
                             assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
@@ -402,7 +428,28 @@ module instruction_decode(
                             assert(alu_a_mux_position == 1'b0);
                             assert(alu_b_mux_position == 1'b0);
                             assert(rd_rf_microcode[7:0] == {$past(instr[18:15]), $past(instr[23:20])});
-                            assert(ex_alu_microcode == {3'b110, $past(instr[14:12])});
+                            assert(ex_alu_microcode[9] == 1'b1);
+                            case ($past(instr[14:12]))
+                                3'b000: begin // BEQ
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_BEQ);
+                                end
+                                3'b001: begin // BNE
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_BNE);
+                                end
+                                3'b100: begin // BLT
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_BLT);
+                                end
+                                3'b101: begin // BGE
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_BGE);
+                                end
+                                3'b110: begin // BLTU
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_BLTU);
+                                end
+                                3'b111: begin // BGEU
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_BGEU);
+                                end
+                                default: assert(0);
+                            endcase
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
                             assert(wb_rf_microcode[4] == 1'b0);
@@ -423,7 +470,8 @@ module instruction_decode(
                             assert(alu_b_mux_position == 1'b1);
                             assert(wb_mux_position == 2'b10);
                             assert(rd_rf_microcode[7:4] == $past(instr[18:15]));
-                            assert(ex_alu_microcode == 6'b100000);
+                            assert(ex_alu_microcode[9] == 1'b1);
+                            assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SUM) == `ALU_MICROCODE_ADD);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode == {2'b10, $past(instr[14:12])});
                             assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
@@ -442,15 +490,16 @@ module instruction_decode(
                             assert(alu_a_mux_position == 1'b0);
                             assert(alu_b_mux_position == 1'b1);
                             assert(rd_rf_microcode[7:0] == {$past(instr[18:15]), $past(instr[23:20])});
-                            assert(ex_alu_microcode == 6'b100000);
+                            assert(ex_alu_microcode[9] == 1'b1);
+                            assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SUM) == `ALU_MICROCODE_ADD);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode == {2'b11, $past(instr[14:12])});
                             assert(wb_rf_microcode[4] == 1'b0);
                             assert(wb_pc_mux_position == 2'b00);
                         end
                     end
-                    7'b0010011: begin // OP-IMM
-                        assert($past(opcode_is_opimm));
+                    7'b0010011: begin // Arith-Imm
+                        assert($past(opcode_is_arith_imm));
                         assert(!$past(invalid_opcode) && !$past(invalid_funct3));
                         assert($past(invalid_funct7) == (($past(instr[14:12]) == 3'b001) && ($past(instr[31:25]) != 7'b0000000) ||
                             (($past(instr[14:12]) == 3'b101) && (($past(instr[31]) != 1'b0) || ($past(instr[29:25]) != 5'b00000)))));
@@ -464,19 +513,45 @@ module instruction_decode(
                             assert(alu_b_mux_position == 1'b1);
                             assert(wb_mux_position == 2'b00);
                             assert(rd_rf_microcode[7:4] == $past(instr[18:15]));
-                            if ($past(instr[14:12]) == 3'b101) begin
-                                assert(ex_alu_microcode == {2'b10, $past(instr[30]), $past(instr[14:12])});
-                            end else begin
-                                assert(ex_alu_microcode == {3'b100, $past(instr[14:12])});
-                            end
+                            assert(ex_alu_microcode[9] == 1'b1);
+                            case ($past(instr[14:12]))
+                                3'b000: begin // ADDI
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SUM) == `ALU_MICROCODE_ADD);
+                                end
+                                3'b001: begin // SLLI
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SHIFT) == `ALU_MICROCODE_SLL);
+                                end
+                                3'b010: begin // SLTI
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_SLT);
+                                end
+                                3'b011: begin // SLTIU
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_SLTU);
+                                end
+                                3'b100: begin // XORI
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_LOGIC) == `ALU_MICROCODE_XOR);
+                                end
+                                3'b101: begin
+                                    if ($past(instr[30])) // SRAI
+                                        assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SHIFT) == `ALU_MICROCODE_SRA);
+                                    else // SRLI
+                                        assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SHIFT) == `ALU_MICROCODE_SRL);
+                                end
+                                3'b110: begin // ORI
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_LOGIC) == `ALU_MICROCODE_OR);
+                                end
+                                3'b111: begin // ANDI
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_LOGIC) == `ALU_MICROCODE_AND);
+                                end
+                                default: assert(0);
+                            endcase
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
                             assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
                             assert(wb_pc_mux_position == 2'b00);
                         end
                     end
-                    7'b0110011: begin // OP
-                        assert($past(opcode_is_op));
+                    7'b0110011: begin // Arith-Reg
+                        assert($past(opcode_is_arith_reg));
                         assert(!$past(invalid_opcode) && !$past(invalid_funct3));
                         assert($past(invalid_funct7) == ((($past(instr[31]) != 1'b0) || ($past(instr[29:25]) != 5'b00000)) ||
                             ($past(instr[30]) && ($past(instr[14:12]) != 3'b000) && ($past(instr[14:12]) != 3'b101))));
@@ -489,7 +564,40 @@ module instruction_decode(
                             assert(alu_b_mux_position == 1'b0);
                             assert(wb_mux_position == 2'b00);
                             assert(rd_rf_microcode[7:0] == {$past(instr[18:15]), $past(instr[23:20])});
-                            assert(ex_alu_microcode == {2'b10, $past(instr[30]), $past(instr[14:12])});
+                            assert(ex_alu_microcode[9] == 1'b1);
+                            case ($past(instr[14:12]))
+                                3'b000: begin
+                                    if ($past(instr[30])) // SUB
+                                        assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SUM) == `ALU_MICROCODE_SUB);
+                                    else // ADD
+                                        assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SUM) == `ALU_MICROCODE_ADD);
+                                end
+                                3'b001: begin // SLL
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SHIFT) == `ALU_MICROCODE_SLL);
+                                end
+                                3'b010: begin // SLT
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_SLT);
+                                end
+                                3'b011: begin // SLTU
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_BRANCH) == `ALU_MICROCODE_SLTU);
+                                end
+                                3'b100: begin // XOR
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_LOGIC) == `ALU_MICROCODE_XOR);
+                                end
+                                3'b101: begin
+                                    if ($past(instr[30])) // SRA
+                                        assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SHIFT) == `ALU_MICROCODE_SRA);
+                                    else // SRL
+                                        assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_SHIFT) == `ALU_MICROCODE_SRL);
+                                end
+                                3'b110: begin // OR
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_LOGIC) == `ALU_MICROCODE_OR);
+                                end
+                                3'b111: begin // AND
+                                    assert((ex_alu_microcode[8:0] & `ALU_MICROCODE_MASK_LOGIC) == `ALU_MICROCODE_AND);
+                                end
+                                default: assert(0);
+                            endcase
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
                             assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});
@@ -513,7 +621,7 @@ module instruction_decode(
                         assert(fault == ($past(invalid_funct7) || $past(invalid_funct3) || $past(invalid_rs) || $past(invalid_rd)));
                         if (!fault) begin
                             assert(!has_rd_stage && !has_ex_stage && !has_ma_stage);
-                            assert(ex_alu_microcode[5] == 1'b0);
+                            assert(ex_alu_microcode[9] == 1'b0);
                             assert(ex_csr_microcode[15] == 1'b0);
                             assert(ma_mem_microcode[4] == 1'b0);
                             assert(wb_rf_microcode[4] == 1'b0);
@@ -533,7 +641,7 @@ module instruction_decode(
                                 !$past(invalid_rs) && !$past(invalid_rd));
                             assert(!fault);
                             assert(!has_rd_stage && has_ex_stage && !has_ma_stage);
-                            assert(ex_alu_microcode[5] == 1'b0);
+                            assert(ex_alu_microcode[9] == 1'b0);
                             assert(ex_csr_microcode == {1'b1, 8'b00000000, ~$past(instr[20]), 3'b011, 3'b000});
                             assert(ma_mem_microcode[4] == 1'b0);
                             assert(wb_rf_microcode[4] == 1'b0);
@@ -549,7 +657,7 @@ module instruction_decode(
                                 !$past(invalid_rs) && !$past(invalid_rd));
                             assert(!fault);
                             assert(!has_rd_stage && has_ex_stage && !has_ma_stage);
-                            assert(ex_alu_microcode[5] == 1'b0);
+                            assert(ex_alu_microcode[9] == 1'b0);
                             assert(ex_csr_microcode[15] == 1'b1);
                             assert(ex_csr_microcode[2:0] == 3'b001);
                             assert(ma_mem_microcode[4] == 1'b0);
@@ -586,7 +694,7 @@ module instruction_decode(
                                     assert(rd_rf_microcode[7:4] == $past(instr[18:15]));
                                     assert(csr_mux_position == 2'b00);
                                 end
-                                assert(ex_alu_microcode[5] == 1'b0);
+                                assert(ex_alu_microcode[9] == 1'b0);
                                 assert(ex_csr_microcode == {1'b1, $past(instr[31:20]), 1'b1, $past(instr[13:12])});
                                 assert(ma_mem_microcode[4] == 1'b0);
                                 assert(wb_rf_microcode == {1'b1, $past(instr[10:7])});

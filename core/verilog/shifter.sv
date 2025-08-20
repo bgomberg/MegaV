@@ -18,10 +18,12 @@ endfunction
 module shifter(
     input [31:0] in, // Input
     input [4:0] amount, // Amount
-    input is_right, // Right shift
-    input is_right_arithmetic, // Right arithmetic shift
+    input [1:0] op, // Operation (00=SLL, 01=SRL, 11=SRA)
     output [31:0] out // Result
 );
+
+    wire is_right = op[0];
+    wire is_right_arithmetic = op[1];
 
     wire shift_in_bit = is_right_arithmetic & in[31];
     wire [31:0] shift_in;
@@ -76,12 +78,12 @@ module shifter(
 `ifdef FORMAL
     /* Validate logic */
     always_comb begin
-        if (is_right && is_right_arithmetic) begin
+        if (op == 2'b11) begin
             assert($signed(out) == ($signed(in) >>> amount));
-        end else if (is_right) begin
+        end else if (op[0]) begin
             assert(out == (in >> amount));
         end else begin
-            assume(!is_right_arithmetic);
+            assume(!op[1]);
             assert(out == (in << amount));
         end
     end

@@ -52,7 +52,9 @@ module register_file(
     );
 
     /* Write r0-r3 */
+    /* verilator lint_off UNUSED */
     wire write_addr_is_r0_n;
+    /* verilator lint_on UNUSED */
     wire write_addr_is_r1_n;
     wire write_addr_is_r2_n;
     wire write_addr_is_r3_n;
