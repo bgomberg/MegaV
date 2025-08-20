@@ -9,10 +9,10 @@
 module register_file(
     input logic clk, // Clock signal
     input logic reset_n, // Reset signal (active low)
-    input logic enable_n, // Enable (active low)
-    input logic write_en, // Perform a write operation
+    input logic write_en_n, // Perform the write operation (active low)
     input logic [3:0] write_addr, // Address to write to
     input logic [31:0] write_data, // Data to be written
+    input logic read_en_n, // Perform the read operation (active low)
     input logic [3:0] read_addr_a, // Address to read from (bus A)
     output logic [31:0] read_data_a, // Data which was read (bus A)
     input logic [3:0] read_addr_b, // Address to read from (bus B)
@@ -42,7 +42,7 @@ module register_file(
     wire write_addr_is_r8_r11_n;
     wire write_addr_is_r12_r15_n;
     demux4 write_addr_upper_demux(
-        .in_n(enable_n | ~write_en),
+        .in_n(write_en_n),
         .s1(write_addr[2]),
         .s2(write_addr[3]),
         .out1_n(write_addr_is_r0_r3_n),
@@ -255,7 +255,7 @@ module register_file(
     dffe #(.BITS(32)) read_data_a_dffe(
         .clk(clk),
         .clear_n(reset_n),
-        .enable_n(enable_n),
+        .enable_n(read_en_n),
         .in(next_read_data_a),
         .out(read_data_a)
     );
@@ -297,7 +297,7 @@ module register_file(
     dffe #(.BITS(32)) read_data_b_dffe(
         .clk(clk),
         .clear_n(reset_n),
-        .enable_n(enable_n),
+        .enable_n(read_en_n),
         .in(next_read_data_b),
         .out(read_data_b)
     );
@@ -344,13 +344,13 @@ module register_file(
 
     always_ff @(posedge clk) begin
         if (f_past_valid & $past(reset_n)) begin
-            assume($past(~enable_n));
-            if ($past(write_en)) begin
+            if ($past(~write_en_n)) begin
                 /* Write path */
                 if (($past(write_addr) != 0) && ($past(write_addr) == f_write_addr)) begin
                     assert(registers[$past(write_addr)] == $past(write_data));
                 end
-            end else begin
+            end
+            if ($past(~read_en_n)) begin
                 /* Read path */
                 if ($past(read_addr_a) == 0) begin
                     assert(read_data_a == 0);

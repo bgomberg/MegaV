@@ -27,7 +27,6 @@ output("prep -top {}".format(taskname))
 
 [tasks]
 core
-program_counter
 memory
 instruction_decode
 register_file
@@ -53,7 +52,6 @@ fsm
 
 [files]
 verilog/core.sv
-verilog/program_counter.sv
 verilog/memory.sv
 verilog/instruction_decode.sv
 verilog/register_file.sv

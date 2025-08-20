@@ -1,6 +1,5 @@
 
 SBY_MODULES := \
-	program_counter \
 	register_file \
 	alu \
 	csr \

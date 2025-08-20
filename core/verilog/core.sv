@@ -1,4 +1,3 @@
-`include "program_counter.sv"
 `include "memory.sv"
 `include "instruction_decode.sv"
 `include "register_file.sv"
@@ -56,22 +55,22 @@ module core(
         .select(pc_in_is_ex_result),
         .out(pc_in_mux_select)
     );
-    wire [31:1] pc_in;
-    mux4 #(.BITS(31)) pc_in_mux(
-        .d1(pc_next_pc[31:1]),
-        .d2(ex_out[31:1]),
-        .d3(pc_offset_pc[31:1]),
-        .d4(31'b0),
+    wire [31:0] pc_in;
+    mux4 #(.BITS(32)) pc_in_mux(
+        .d1(pc_next_pc),
+        .d2({ex_out[31:1], 1'b0}),
+        .d3({pc_offset_pc[31:1], 1'b0}),
+        .d4(32'b0),
         .select(pc_in_mux_select),
         .out(pc_in)
     );
     wire pc_enable_n = stage_active_n[`STAGE_UPDATE_PC];
-    (* keep *) program_counter pc_module(
+    dffe #(.BITS(32)) pc_dffe(
         .clk(clk),
-        .reset_n(reset_n),
+        .clear_n(reset_n),
         .enable_n(pc_enable_n),
-        .in({pc_in, 1'b0}),
-        .pc(pc_pc)
+        .in(pc_in),
+        .out(pc_pc)
     );
 
     /* Memory */
@@ -84,11 +83,10 @@ module core(
         .select(stage_active_n[`STAGE_FETCH]),
         .out(mem_op_size)
     );
-    logic [31:0] mem_computed_addr;
     wire [31:0] mem_addr;
     mux2 #(.BITS(32)) mem_addr_mux(
         .a(pc_pc),
-        .b(mem_computed_addr),
+        .b(ex_alu_out),
         .select(stage_active_n[`STAGE_FETCH]),
         .out(mem_addr)
     );
@@ -115,15 +113,15 @@ module core(
     wire [1:0] decode_csr_mux_position /* verilator public */;
     wire [1:0] decode_wb_mux_position /* verilator public */;
     wire [7:0] decode_rd_rf_microcode /* verilator public */;
-    wire [9:0] decode_ex_alu_microcode /* verilator public */;
+    wire [8:0] decode_ex_alu_microcode /* verilator public */;
     wire [15:0] decode_ex_csr_microcode /* verilator public */;
     wire [3:0] decode_ma_mem_microcode /* verilator public */;
-    /* verilator lint_off UNOPT */
-    wire [4:0] decode_wb_rf_microcode /* verilator public */;
-    /* verilator lint_on UNOPT */
+    wire [3:0] decode_wb_rf_microcode /* verilator public */;
     wire [1:0] decode_wb_pc_mux_position /* verilator public */;
+    wire decode_ex_alu_enabled /* verilator public */;
     wire decode_has_mem_stage;
-    wire decode_has_read_stage;
+    wire decode_rd_rf_enabled;
+    wire decode_wb_rf_enabled;
     wire decode_fault;
     wire [31:0] instr /* verilator public */;
     mux2 #(.BITS(32)) instr_mux(
@@ -143,21 +141,25 @@ module core(
         .alu_b_mux_position(decode_alu_b_mux_position),
         .csr_mux_position(decode_csr_mux_position),
         .wb_mux_position(decode_wb_mux_position),
-        .rd_rf_microcode({decode_has_read_stage, decode_rd_rf_microcode}),
-        .ex_alu_microcode(decode_ex_alu_microcode),
+        .rd_rf_microcode({decode_rd_rf_enabled, decode_rd_rf_microcode}),
+        .ex_alu_microcode({decode_ex_alu_enabled, decode_ex_alu_microcode}),
         .ma_mem_microcode({decode_has_mem_stage, decode_ma_mem_microcode}),
         .ex_csr_microcode(decode_ex_csr_microcode),
-        .wb_rf_microcode(decode_wb_rf_microcode),
+        .wb_rf_microcode({decode_wb_rf_enabled, decode_wb_rf_microcode}),
         .wb_pc_mux_position(decode_wb_pc_mux_position),
         .fault(decode_fault)
     );
 
-    /* Register file */
+    /*
+        Register File:
+            [READ]: rf_read_data_a = reg[rf_read_addr_a]; rf_read_data_b = reg[rf_read_addr_b]
+            [WRITE_BACK]: reg[rf_write_addr] = rf_write_data;
+    */
     wire [31:0] ex_out;
     mux2 #(.BITS(32)) ex_out_mux(
         .a(csr_read_value),
         .b(ex_alu_out),
-        .select(decode_ex_alu_microcode[9]),
+        .select(decode_ex_alu_enabled),
         .out(ex_out)
     );
     wire [31:0] rf_write_data /* verilator public */;
@@ -171,24 +173,30 @@ module core(
     );
     wire [31:0] rf_read_data_a /* verilator public */;
     wire [31:0] rf_read_data_b /* verilator public */;
-    wire rf_is_read_stage = ~stage_active_n[`STAGE_READ] & decode_has_read_stage;
-    wire rf_is_wb_stage = ~stage_active_n[`STAGE_WRITE_BACK] & decode_wb_rf_microcode[4];
-    wire rf_enable_n = ~rf_is_read_stage & ~rf_is_wb_stage;
-    wire rf_write_en = ~rf_is_read_stage;
+    wire rf_read_en_n = stage_active_n[`STAGE_READ] | ~decode_rd_rf_enabled;
+    wire rf_write_en_n = stage_active_n[`STAGE_WRITE_BACK] | ~decode_wb_rf_enabled;
+    wire [3:0] rf_write_addr = decode_wb_rf_microcode;
+    wire [3:0] rf_read_addr_a = decode_rd_rf_microcode[7:4];
+    wire [3:0] rf_read_addr_b = decode_rd_rf_microcode[3:0];
     (* keep *) register_file rf_module(
         .clk(clk),
         .reset_n(reset_n),
-        .enable_n(rf_enable_n),
-        .write_en(rf_write_en),
-        .write_addr(decode_wb_rf_microcode[3:0]),
+        .write_en_n(rf_write_en_n),
+        .write_addr(rf_write_addr),
         .write_data(rf_write_data),
-        .read_addr_a(decode_rd_rf_microcode[7:4]),
+        .read_en_n(rf_read_en_n),
+        .read_addr_a(rf_read_addr_a),
         .read_data_a(rf_read_data_a),
-        .read_addr_b(decode_rd_rf_microcode[3:0]),
+        .read_addr_b(rf_read_addr_b),
         .read_data_b(rf_read_data_b)
     );
 
-    /* ALU */
+    /*
+        ALU:
+            [FETCH] pc_next_pc = pc_pc + 4
+            [EXECUTE] ex_alu_out = *
+            [WRITE_BACK] pc_offset_pc = pc_pc + decode_imm
+    */
     logic [31:0] ex_alu_out;
     wire [31:0] alu_in_a;
     mux2 #(.BITS(32)) alu_in_a_mux(
@@ -208,7 +216,7 @@ module core(
     );
     wire [8:0] alu_microcode;
     mux2 #(.BITS(9)) alu_microcode_mux(
-        .a(decode_ex_alu_microcode[8:0]),
+        .a(decode_ex_alu_microcode),
         .b(9'b0),
         .select(stage_active_n[`STAGE_EXECUTE]),
         .out(alu_microcode)
@@ -240,13 +248,6 @@ module core(
         .enable_n(stage_active_n[`STAGE_WRITE_BACK]),
         .in(alu_out),
         .out(pc_offset_pc)
-    );
-    dffe #(.BITS(32)) mem_computed_addr_dffe(
-        .clk(clk),
-        .clear_n(reset_n),
-        .enable_n(stage_active_n[`STAGE_EXECUTE]),
-        .in(alu_out),
-        .out(mem_computed_addr)
     );
 
     /* CSR */

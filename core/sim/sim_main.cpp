@@ -125,6 +125,7 @@ public:
         printf("    wb_pc_mux_position: 0x%x\n", (*this)->decode_wb_pc_mux_position);
         printf("    wb_mux_position: 0x%x\n", (*this)->decode_wb_mux_position);
         printf("    rd_rf_microcode: 0x%x\n", (*this)->decode_rd_rf_microcode);
+        printf("    ex_alu_enabled: %d\n", (*this)->decode_ex_alu_enabled);
         printf("    ex_alu_microcode: 0x%x\n", (*this)->decode_ex_alu_microcode);
         printf("    ex_csr_microcode: 0x%x\n", (*this)->decode_ex_csr_microcode);
         printf("    ma_mem_microcode: 0x%x\n", (*this)->decode_ma_mem_microcode);
