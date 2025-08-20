@@ -37,5 +37,4 @@
 `define ALU_MICROCODE_OR            {4'b0000, 2'b00, 3'b110}
 `define ALU_MICROCODE_AND           {4'b0000, 2'b00, 3'b111}
 
-
 `endif

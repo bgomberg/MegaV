@@ -62,6 +62,7 @@ verilog/shifter.sv
 verilog/csr.sv
 verilog/fsm.sv
 constants/alu_microcode.sv verilog/constants/alu_microcode.sv
+constants/csr_op.sv verilog/constants/csr_op.sv
 constants/fsm_control_op.sv verilog/constants/fsm_control_op.sv
 constants/fsm_fault_num.sv verilog/constants/fsm_fault_num.sv
 constants/mem_fault_num.sv verilog/constants/mem_fault_num.sv

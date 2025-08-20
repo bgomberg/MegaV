@@ -1,3 +1,4 @@
+`include "constants/csr_op.sv"
 `include "cells/and2.sv"
 `include "cells/dff.sv"
 `include "cells/dffe.sv"
@@ -16,7 +17,7 @@ module csr #(
     input logic enable_n, // Enable (active low)
     input logic is_write_stage, // Perform the write portion of the operation
     input logic ext_int, // External interrupt
-    input logic [2:0] op, // (3'b000=Exception, 3'b001=MRET, 3'b011=Nop, 3'b101=CSRRW, 3'b110=CSRRS, 3'b111=CSRRC)
+    input logic [2:0] op, // Operation
     input logic [11:0] addr_exception, // Address / exception value
     input logic [31:0] write_value, // Write value
     output logic [31:0] read_value, // Read value
@@ -49,7 +50,7 @@ module csr #(
     wire op_is_write_mret = is_write_stage & op_is_mret;
     wire op_is_valid_read_write = op_is_exception | op_is_mret | op_is_nop | (op_is_csr & addr_exception_is_valid);
 
-    /* State */
+    /* Registers */
     logic reg_ints_enabled;
     logic temp_reg_ints_enabled;
     logic prior_reg_ints_enabled;
@@ -62,13 +63,13 @@ module csr #(
     logic reg_trap_is_int;
 
     /* Write Logic */
-    wire [31:0] write_value_or_mask; // = {32{~op_is_csr_rc}} & write_value;
+    wire [31:0] write_value_or_mask;
     and2 #(.BITS(32)) write_value_or_mask_and(
         .a({32{~op_is_csr_rc}}),
         .b(write_value),
         .out(write_value_or_mask)
     );
-    wire [31:0] write_value_and_mask; // = {32{~op_is_csr_rw}} & ~write_value;
+    wire [31:0] write_value_and_mask;
     nor2 #(.BITS(32)) write_value_and_mask_nor(
         .a({32{op_is_csr_rw}}),
         .b(write_value),
@@ -344,138 +345,163 @@ module csr #(
                 end else begin
                     assert(~sw_int_pending);
                 end
-                if ($past(op) == 3'b000) begin
-                    // exception
-                    assert(!fault);
-                    if (!$past(is_write_stage)) begin
-                        // read stage
-                        assert(read_value[31:2] == IRQ_HANDLER_ADDR[31:2]);
-                        assert(temp_reg_ints_enabled == $past(reg_ints_enabled));
-                    end else begin
-                        // write stage
-                        assert(reg_exception_code == $past(addr_exception[3:0]));
-                        assert(reg_trap_is_int == $past(addr_exception[4]));
-                        assert(exception_pc[31:2] == $past(write_value[31:2]));
-                        assert(exception_pc[1:0] == 2'b0);
-                        assert(!reg_ints_enabled);
-                        assert(prior_reg_ints_enabled == $past(temp_reg_ints_enabled));
-                        if ($past(addr_exception[4:0]) == 5'b10011) begin
-                            assert(!reg_sw_int_pending);
-                        end else begin
-                            assert(reg_sw_int_pending == $past(reg_sw_int_pending));
-                        end
-                    end
-                end else if ($past(op) == 3'b001) begin
-                    // MRET
-                    assert(!fault);
-                    if (!$past(is_write_stage)) begin
-                        // read stage
-                        assert(read_value == $past(exception_pc));
-                        assert(temp_reg_ints_enabled == $past(prior_reg_ints_enabled));
-                    end else begin
-                        // write stage
-                        assert(reg_ints_enabled == $past(temp_reg_ints_enabled));
-                        assert(exception_pc == $past(exception_pc));
-                    end
-                end else if ($past(op) == 3'b011) begin
-                    // No-Op
-                    assert(!fault);
-                end else if ($past(op[2]) && ($past(op[1:0]) != 2'b0)) begin
-                    // CSR* instruction
-                    case ($past(addr_exception))
-                        12'h300: begin // mstatus
+                if ($past(is_write_stage)) begin
+                    // Write state
+                    case ($past(op))
+                        `CSR_OP_EXCEPTION: begin
                             assert(!fault);
-                            if (!$past(is_write_stage)) begin
-                                // read stage
-                                assert(read_value == {28'b0, $past(prior_reg_ints_enabled), 3'b0, $past(reg_ints_enabled), 3'b0});
+                            assert(reg_exception_code == $past(addr_exception[3:0]));
+                            assert(reg_trap_is_int == $past(addr_exception[4]));
+                            assert(exception_pc[31:2] == $past(write_value[31:2]));
+                            assert(exception_pc[1:0] == 2'b0);
+                            assert(!reg_ints_enabled);
+                            assert(prior_reg_ints_enabled == $past(temp_reg_ints_enabled));
+                            if ($past(addr_exception[4:0]) == 5'b10011) begin
+                                assert(!reg_sw_int_pending);
                             end else begin
-                                // write stage
-                                if ($past(op) == 3'b101)
+                                assert(reg_sw_int_pending == $past(reg_sw_int_pending));
+                            end
+                        end
+                        `CSR_OP_MRET: begin
+                            assert(!fault);
+                            assert(reg_ints_enabled == $past(temp_reg_ints_enabled));
+                            assert(exception_pc == $past(exception_pc));
+                        end
+                        `CSR_OP_NO_OP: begin
+                            assert(!fault);
+                        end
+                        `CSR_OP_CSRRW: begin
+                            case ($past(addr_exception))
+                                12'h300: begin // mstatus
+                                    assert(!fault);
                                     assert(reg_ints_enabled == $past(write_value[3]));
-                                else if ($past(op) == 3'b110)
-                                    assert(reg_ints_enabled == ($past(reg_ints_enabled) | $past(write_value[3])));
-                                else if ($past(op) == 3'b111)
-                                    assert(reg_ints_enabled == ($past(reg_ints_enabled) & ~$past(write_value[3])));
-                                if ($past(op) == 3'b101)
                                     assert(prior_reg_ints_enabled == $past(write_value[7]));
-                                else if ($past(op) == 3'b110)
-                                    assert(prior_reg_ints_enabled == ($past(prior_reg_ints_enabled) | $past(write_value[7])));
-                                else if ($past(op) == 3'b111)
-                                    assert(prior_reg_ints_enabled == ($past(prior_reg_ints_enabled) & ~$past(write_value[7])));
-                            end
-                        end
-                        12'h304: begin // mie
-                            assert(!fault);
-                            if (!$past(is_write_stage)) begin
-                                // read stage
-                                assert(read_value == {20'b0, $past(reg_ext_int_enabled), 7'b0, $past(reg_sw_int_enabled), 3'b0});
-                            end else begin
-                                // write stage
-                                if ($past(op) == 3'b101)
+                                end
+                                12'h304: begin // mie
+                                    assert(!fault);
                                     assert(reg_ext_int_enabled == $past(write_value[11]));
-                                else if ($past(op) == 3'b110)
-                                    assert(reg_ext_int_enabled == ($past(reg_ext_int_enabled) | $past(write_value[11])));
-                                else if ($past(op) == 3'b111)
-                                    assert(reg_ext_int_enabled == ($past(reg_ext_int_enabled) & ~$past(write_value[11])));
-                                if ($past(op) == 3'b101)
                                     assert(reg_sw_int_enabled == $past(write_value[3]));
-                                else if ($past(op) == 3'b110)
-                                    assert(reg_sw_int_enabled == ($past(reg_sw_int_enabled) | $past(write_value[3])));
-                                else if ($past(op) == 3'b111)
-                                    assert(reg_sw_int_enabled == ($past(reg_sw_int_enabled) & ~$past(write_value[3])));
-                            end
-                        end
-                        12'h341: begin // mepc
-                            assert(!fault);
-                            if (!$past(is_write_stage)) begin
-                                // read stage
-                                assert(read_value == $past(exception_pc));
-                            end else begin
-                                // write stage
-                                if ($past(op) == 3'b101)
+                                end
+                                12'h341: begin // mepc
+                                    assert(!fault);
                                     assert(exception_pc[31:2] == $past(write_value[31:2]));
-                                else if ($past(op) == 3'b110)
-                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) | $past(write_value[31:2])));
-                                else if ($past(op) == 3'b111)
-                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) & ~$past(write_value[31:2])));
-                            end
-                        end
-                        12'h342: begin // mcause
-                            assert(!fault);
-                            if (!$past(is_write_stage)) begin
-                                // read stage
-                                assert(read_value == {$past(reg_trap_is_int), 27'b0, $past(reg_exception_code)});
-                            end else begin
-                                // write stage
-                                if ($past(op) == 3'b101)
+                                end
+                                12'h342: begin // mcause
+                                    assert(!fault);
                                     assert(reg_exception_code == $past(write_value[3:0]));
-                                else if ($past(op) == 3'b110)
-                                    assert(reg_exception_code == ($past(reg_exception_code[3:0]) | $past(write_value[3:0])));
-                                else if ($past(op) == 3'b111)
-                                    assert(reg_exception_code == ($past(reg_exception_code[3:0]) & ~$past(write_value[3:0])));
-                            end
-                        end
-                        12'h344: begin // mip
-                            assert(!fault);
-                            if (!$past(is_write_stage)) begin
-                                // read stage
-                                assert(read_value == {20'b0, $past(reg_ext_int_pending), 7'b0, $past(reg_sw_int_pending), 3'b0});
-                            end else begin
-                                // write stage
-                                if ($past(op) == 3'b101)
+                                end
+                                12'h344: begin // mip
+                                    assert(!fault);
                                     assert(reg_sw_int_pending == $past(write_value[3]));
-                                else if ($past(op) == 3'b110)
+                                end
+                                default:
+                                    assert(fault);
+                            endcase
+                        end
+                        `CSR_OP_CSRRS: begin
+                            case ($past(addr_exception))
+                                12'h300: begin // mstatus
+                                    assert(!fault);
+                                    assert(reg_ints_enabled == ($past(reg_ints_enabled) | $past(write_value[3])));
+                                    assert(prior_reg_ints_enabled == ($past(prior_reg_ints_enabled) | $past(write_value[7])));
+                                end
+                                12'h304: begin // mie
+                                    assert(!fault);
+                                    assert(reg_ext_int_enabled == ($past(reg_ext_int_enabled) | $past(write_value[11])));
+                                    assert(reg_sw_int_enabled == ($past(reg_sw_int_enabled) | $past(write_value[3])));
+                                end
+                                12'h341: begin // mepc
+                                    assert(!fault);
+                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) | $past(write_value[31:2])));
+                                end
+                                12'h342: begin // mcause
+                                    assert(!fault);
+                                    assert(reg_exception_code == ($past(reg_exception_code[3:0]) | $past(write_value[3:0])));
+                                end
+                                12'h344: begin // mip
+                                    assert(!fault);
                                     assert(reg_sw_int_pending == ($past(reg_sw_int_pending) | $past(write_value[3])));
-                                else if ($past(op) == 3'b111)
+                                end
+                                default:
+                                    assert(fault);
+                            endcase
+                        end
+                        `CSR_OP_CSRRC: begin
+                            case ($past(addr_exception))
+                                12'h300: begin // mstatus
+                                    assert(!fault);
+                                    assert(reg_ints_enabled == ($past(reg_ints_enabled) & ~$past(write_value[3])));
+                                    assert(prior_reg_ints_enabled == ($past(prior_reg_ints_enabled) & ~$past(write_value[7])));
+                                end
+                                12'h304: begin // mie
+                                    assert(!fault);
+                                    assert(reg_ext_int_enabled == ($past(reg_ext_int_enabled) & ~$past(write_value[11])));
+                                    assert(reg_sw_int_enabled == ($past(reg_sw_int_enabled) & ~$past(write_value[3])));
+                                end
+                                12'h341: begin // mepc
+                                    assert(!fault);
+                                    assert(exception_pc[31:2] == ($past(exception_pc[31:2]) & ~$past(write_value[31:2])));
+                                end
+                                12'h342: begin // mcause
+                                    assert(!fault);
+                                    assert(reg_exception_code == ($past(reg_exception_code[3:0]) & ~$past(write_value[3:0])));
+                                end
+                                12'h344: begin // mip
+                                    assert(!fault);
                                     assert(reg_sw_int_pending == ($past(reg_sw_int_pending) & ~$past(write_value[3])));
-                            end
+                                end
+                                default:
+                                    assert(fault);
+                            endcase
                         end
-                        default: begin
+                        default:
                             assert(fault);
-                        end
                     endcase
                 end else begin
-                    assert(fault);
+                    // Read stage
+                    case ($past(op))
+                        `CSR_OP_EXCEPTION: begin
+                            assert(!fault);
+                            assert(read_value[31:2] == IRQ_HANDLER_ADDR[31:2]);
+                            assert(temp_reg_ints_enabled == $past(reg_ints_enabled));
+                        end
+                        `CSR_OP_MRET: begin
+                            assert(!fault);
+                            assert(read_value == $past(exception_pc));
+                            assert(temp_reg_ints_enabled == $past(prior_reg_ints_enabled));
+                        end
+                        `CSR_OP_NO_OP: begin
+                            assert(!fault);
+                        end
+                        `CSR_OP_CSRRW, `CSR_OP_CSRRS, `CSR_OP_CSRRC: begin
+                            case ($past(addr_exception))
+                                12'h300: begin // mstatus
+                                    assert(!fault);
+                                    assert(read_value == {28'b0, $past(prior_reg_ints_enabled), 3'b0, $past(reg_ints_enabled), 3'b0});
+                                end
+                                12'h304: begin // mie
+                                    assert(!fault);
+                                    assert(read_value == {20'b0, $past(reg_ext_int_enabled), 7'b0, $past(reg_sw_int_enabled), 3'b0});
+                                end
+                                12'h341: begin // mepc
+                                    assert(!fault);
+                                    assert(read_value == $past(exception_pc));
+                                end
+                                12'h342: begin // mcause
+                                    assert(!fault);
+                                    assert(read_value == {$past(reg_trap_is_int), 27'b0, $past(reg_exception_code)});
+                                end
+                                12'h344: begin // mip
+                                    assert(!fault);
+                                    assert(read_value == {20'b0, $past(reg_ext_int_pending), 7'b0, $past(reg_sw_int_pending), 3'b0});
+                                end
+                                default:
+                                    assert(fault);
+                            endcase
+                        end
+                        default:
+                            assert(fault);
+                    endcase
                 end
             end
         end
