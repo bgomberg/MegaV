@@ -73,7 +73,11 @@ module core(
         .out(pc_pc)
     );
 
-    /* Memory */
+    /*
+        Memory:
+            [FETCH]: instr = mem[pc_pc]
+            [MEMORY]: rf_write_data = mem[ex_alu_out] || mem[ex_alu_out] = rf_read_data_b
+    */
     wire [31:0] mem_out /* verilator public */;
     wire [2:0] mem_fault_num /* verilator public */;
     wire [1:0] mem_op_size;
@@ -93,6 +97,7 @@ module core(
     wire mem_enable_n = (stage_active_n[`STAGE_FETCH] | ~control_op_normal) & (stage_active_n[`STAGE_MEMORY] | ~decode_has_mem_stage);
     wire mem_is_write = ~stage_active_n[`STAGE_MEMORY] & decode_ma_mem_microcode[3];
     wire mem_is_unsigned = ~stage_active_n[`STAGE_MEMORY] & decode_ma_mem_microcode[2];
+    wire [31:0] mem_in = rf_read_data_b;
     (* keep *) memory mem_module(
         .clk(clk),
         .reset_n(reset_n),
@@ -101,7 +106,7 @@ module core(
         .is_unsigned(mem_is_unsigned),
         .op_size(mem_op_size),
         .addr(mem_addr),
-        .in(rf_read_data_b),
+        .in(mem_in),
         .out(mem_out),
         .fault_num(mem_fault_num)
     );
@@ -114,7 +119,7 @@ module core(
     wire [1:0] decode_wb_mux_position /* verilator public */;
     wire [7:0] decode_rd_rf_microcode /* verilator public */;
     wire [8:0] decode_ex_alu_microcode /* verilator public */;
-    wire [15:0] decode_ex_csr_microcode /* verilator public */;
+    wire [14:0] decode_ex_csr_microcode /* verilator public */;
     wire [3:0] decode_ma_mem_microcode /* verilator public */;
     wire [3:0] decode_wb_rf_microcode /* verilator public */;
     wire [1:0] decode_wb_pc_mux_position /* verilator public */;
@@ -122,6 +127,7 @@ module core(
     wire decode_has_mem_stage;
     wire decode_rd_rf_enabled;
     wire decode_wb_rf_enabled;
+    wire decode_ex_csr_enabled;
     wire decode_fault;
     wire [31:0] instr /* verilator public */;
     mux2 #(.BITS(32)) instr_mux(
@@ -144,7 +150,7 @@ module core(
         .rd_rf_microcode({decode_rd_rf_enabled, decode_rd_rf_microcode}),
         .ex_alu_microcode({decode_ex_alu_enabled, decode_ex_alu_microcode}),
         .ma_mem_microcode({decode_has_mem_stage, decode_ma_mem_microcode}),
-        .ex_csr_microcode(decode_ex_csr_microcode),
+        .ex_csr_microcode({decode_ex_csr_enabled, decode_ex_csr_microcode}),
         .wb_rf_microcode({decode_wb_rf_enabled, decode_wb_rf_microcode}),
         .wb_pc_mux_position(decode_wb_pc_mux_position),
         .fault(decode_fault)
@@ -250,12 +256,16 @@ module core(
         .out(pc_offset_pc)
     );
 
-    /* CSR */
+    /*
+        CSR:
+            [EXECUTE] ex_alu_out = *
+            [MEMORY] pc_offset_pc = pc_pc + decode_imm
+    */
     wire [2:0] csr_op;
     mux2 #(.BITS(3)) csr_op_mux(
         .a(3'b011),
         .b(decode_ex_csr_microcode[2:0]),
-        .select((~stage_active_n[`STAGE_EXECUTE] | ~stage_active_n[`STAGE_MEMORY]) & decode_ex_csr_microcode[15]),
+        .select(decode_ex_csr_enabled),
         .out(csr_op)
     );
     wire [3:0] csr_trap_num;
@@ -293,7 +303,7 @@ module core(
     wire csr_ext_int_pending;
     wire csr_sw_int_pending;
     wire csr_enable_n = stage_active_n[`STAGE_EXECUTE] & stage_active_n[`STAGE_MEMORY];
-    wire csr_is_write_stage = ~stage_active_n[`STAGE_MEMORY] & decode_ex_csr_microcode[15];
+    wire csr_is_write_stage = ~stage_active_n[`STAGE_MEMORY] & decode_ex_csr_enabled;
     (* keep *) csr csr_module(
         .clk(clk),
         .reset_n(reset_n),

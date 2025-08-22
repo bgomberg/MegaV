@@ -10,13 +10,15 @@ smtbmc yices
 early_log(workdir, "Verifying module: {}".format(taskname))
 cells = (
     "and2",
+    "and4",
     "demux4",
     "dff", "dffe",
     "mux2", "mux4", "mux8",
     "nand8",
     "nor2", "nor4",
     "or2", "or4",
-    "xor2"
+    "xor2",
+    "xor3"
 )
 if taskname in cells:
     output("read -formal -sv cells/{}.sv".format(taskname))
@@ -35,6 +37,7 @@ adder4
 adder32
 shifter
 and2
+and4
 nand8
 mux2
 mux4
@@ -47,6 +50,7 @@ or4
 nor2
 nor4
 xor2
+xor3
 csr
 fsm
 
@@ -69,6 +73,7 @@ constants/mem_fault_num.sv verilog/constants/mem_fault_num.sv
 constants/mem_op_size.sv verilog/constants/mem_op_size.sv
 constants/stages.sv verilog/constants/stages.sv
 cells/and2.sv verilog/cells/and2.sv
+cells/and4.sv verilog/cells/and4.sv
 cells/nand8.sv verilog/cells/nand8.sv
 cells/or2.sv verilog/cells/or2.sv
 cells/or4.sv verilog/cells/or4.sv
@@ -82,4 +87,5 @@ cells/dff.sv verilog/cells/dff.sv
 cells/dff_stages.sv verilog/cells/dff_stages.sv
 cells/dffe.sv verilog/cells/dffe.sv
 cells/xor2.sv verilog/cells/xor2.sv
+cells/xor3.sv verilog/cells/xor3.sv
 cells/external_memory.sv verilog/cells/external_memory.sv

@@ -10,6 +10,7 @@ SBY_MODULES := \
 	adder32 \
 	shifter \
 	and2 \
+	and4 \
 	nand8 \
 	or2 \
 	or4 \
@@ -21,7 +22,8 @@ SBY_MODULES := \
 	demux4 \
 	dff \
 	dffe \
-	xor2
+	xor2 \
+	xor3
 SBY_OBJ_DIR = $(BUILD_DIR)/sby
 SBY_RESULTS := $(addprefix $(SBY_OBJ_DIR)/,$(SBY_MODULES:=.pass))
 SBY_CONFIG_FILE := scripts/verify.sby
