@@ -11,6 +11,8 @@ SBY_MODULES := \
 	shifter \
 	and2 \
 	and4 \
+	nand3 \
+	nand4 \
 	nand8 \
 	or2 \
 	or4 \

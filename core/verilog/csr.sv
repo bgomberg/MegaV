@@ -1,16 +1,13 @@
+`include "constants/csr_mapped_addr.sv"
 `include "constants/csr_op.sv"
 `include "cells/and2.sv"
 `include "cells/dff.sv"
 `include "cells/dffe.sv"
-`include "cells/and4.sv"
 `include "cells/mux2.sv"
 `include "cells/mux4.sv"
 `include "cells/mux8.sv"
-`include "cells/nand8.sv"
 `include "cells/nor2.sv"
-`include "cells/nor4.sv"
 `include "cells/or2.sv"
-`include "cells/xor3.sv"
 
 `define MSTATUS_BIT_INTS_ENABLED                3
 `define MSTATUS_BIT_PRIOR_INTS_ENABLED          7
@@ -32,102 +29,40 @@ module csr #(
     input logic is_write_stage, // Perform the write portion of the operation
     input logic ext_int, // External interrupt
     input logic [2:0] op, // Operation
-    input logic [11:0] addr_exception, // Address / exception value
+    input logic [4:0] addr_exception, // Address / exception value
     input logic [31:0] write_value, // Write value
     output logic [31:0] read_value, // Read value
     output logic ext_int_pending, // External interrupt pending
-    output logic sw_int_pending, // Software interrupt pending
-    output logic fault // Fault condition
+    output logic sw_int_pending // Software interrupt pending
 );
 
     /* Address Decode */
-    wire addr_exception_zero_check1;
-    nor4 addr_exception_zero_check1_nor(
-        .a(addr_exception[11]),
-        .b(addr_exception[10]),
-        .c(addr_exception[7]),
-        .d(addr_exception[5]),
-        .out(addr_exception_zero_check1)
-    );
-    wire addr_exception_zero_check2;
-    nor2 addr_exception_zero_check2_nor(
-        .a(addr_exception[4]),
-        .b(addr_exception[3]),
-        .out(addr_exception_zero_check2)
-    );
-    wire addr_exception_is_valid_unused_bits;
-    and4 addr_exception_is_valid_unused_bits_and(
-        .a(addr_exception_zero_check1),
-        .b(addr_exception_zero_check2),
-        .c(addr_exception[9]),
-        .d(addr_exception[8]),
-        .out(addr_exception_is_valid_unused_bits)
-    );
-    wire addr_exception_bits_6_1_0_zero_check;
-    nor4 addr_exception_bits_6_1_0_zero_check_nor(
-        .a(addr_exception[6]),
-        .b(addr_exception[1]),
-        .c(addr_exception[0]),
-        .d(1'b0),
-        .out(addr_exception_bits_6_1_0_zero_check)
-    );
-    wire addr_exception_lower_3_odd_parity_check;
-    xor3 addr_exception_lower_3_odd_parity_check_xor(
-        .a(addr_exception[2]),
-        .b(addr_exception[1]),
-        .c(addr_exception[0]),
-        .out(addr_exception_lower_3_odd_parity_check)
-    );
-    wire addr_exception_lower_3_not_all_one_check;
-    nand8 addr_exception_lower_3_not_all_one_check_nand(
-        .a(addr_exception[2]),
-        .b(addr_exception[1]),
-        .c(addr_exception[0]),
-        .d(1'b1),
-        .e(1'b1),
-        .f(1'b1),
-        .g(1'b1),
-        .h(1'b1),
-        .out(addr_exception_lower_3_not_all_one_check)
-    );
-    wire addr_exception_is_valid = addr_exception_is_valid_unused_bits & (
-        addr_exception_bits_6_1_0_zero_check |
-        (addr_exception[6] & addr_exception_lower_3_odd_parity_check & addr_exception_lower_3_not_all_one_check)
-    );
-    wire [2:0] mapped_csr_reg_address = {addr_exception[6], addr_exception[2] | addr_exception[1], addr_exception[2] | addr_exception[0]};
+    wire [2:0] mapped_csr_reg_address = addr_exception[2:0];
     wire addr_exception_is_trap = addr_exception[4];
     wire addr_exception_is_trap_sw_int = addr_exception_is_trap & (addr_exception[3:0] == 4'b0011);
     wire addr_exception_is_trap_ext_int = addr_exception_is_trap & (addr_exception[3:0] == 4'b1011);
 
     /* Op Decode */
-    wire op_is_csr = op[2] & (op[1] | op[0]);
     wire op_is_exception = ~op[2] & ~op[1] & ~op[0];
     wire op_is_mret = ~op[2] & ~op[1] & op[0];
-    wire op_is_csr_rw = op_is_csr & ~op[1] & op[0];
-    wire op_is_csr_rc = op_is_csr & op[1] & op[0];
-    wire op_is_nop = ~op[2] & op[1] & op[0];
-    wire op_is_write_mie = is_write_stage & op_is_csr & (mapped_csr_reg_address == 3'b011);
-    wire op_is_write_mip = is_write_stage & op_is_csr & (mapped_csr_reg_address == 3'b111);
-    wire op_is_write_mepc = is_write_stage & op_is_csr & (mapped_csr_reg_address == 3'b101);
-    wire op_is_write_mcause = is_write_stage & op_is_csr & (mapped_csr_reg_address == 3'b110);
-    wire op_is_write_mstatus = is_write_stage & op_is_csr & (mapped_csr_reg_address == 3'b000);
+    wire op_is_csr = op[2] & (op[1] | op[0]);
+    wire op_is_csr_rw = op[2] & ~op[1] & op[0];
+    wire op_is_csr_rc = op[2] & op[1] & op[0];
+    wire is_write_csr = is_write_stage & op_is_csr;
+    wire op_is_write_mstatus = is_write_csr & (mapped_csr_reg_address == `CSR_MAPPED_ADDR_MSTATUS);
+    wire op_is_write_mie = is_write_csr & (mapped_csr_reg_address == `CSR_MAPPED_ADDR_MIE);
+    wire op_is_write_mepc = is_write_csr & (mapped_csr_reg_address == `CSR_MAPPED_ADDR_MEPC);
+    wire op_is_write_mcause = is_write_csr & (mapped_csr_reg_address == `CSR_MAPPED_ADDR_MCAUSE);
+    wire op_is_write_mip = is_write_csr & (mapped_csr_reg_address == `CSR_MAPPED_ADDR_MIP);
     wire op_is_write_exception = is_write_stage & op_is_exception;
     wire op_is_write_mret = is_write_stage & op_is_mret;
-    wire op_is_valid_read_write = op_is_exception | op_is_mret | op_is_nop | (op_is_csr & addr_exception_is_valid);
 
     /* Registers */
-    /* verilator lint_off UNUSED */
     logic [31:0] reg_mstatus;
     logic [31:0] reg_mepc;
     logic [31:0] reg_mcause;
     logic [31:0] reg_mie;
     logic [31:0] reg_mip;
-    /* verilator lint_on UNUSED */
-    // Zero out unused register fields
-    assign reg_mip[31:12] = 20'b0;
-    assign reg_mip[10:4] = 7'b0;
-    assign reg_mip[2:0] = 3'b0;
-
     logic temp_reg_ints_enabled;
 
     /* Read Value */
@@ -153,7 +88,7 @@ module csr #(
         .select(next_read_value_mux_select),
         .out(next_read_value)
     );
-    wire update_read_value = ~is_write_stage & (op_is_exception | op_is_mret | (op_is_csr & addr_exception_is_valid));
+    wire update_read_value = ~is_write_stage & (op_is_exception | op_is_mret | op_is_csr);
     dffe #(.BITS(32)) read_value_dffe(
         .clk(clk),
         .clear_n(reset_n),
@@ -260,40 +195,30 @@ module csr #(
         .out(reg_mie)
     );
 
-    /* External Interrupt */
-    dff ext_int_pending_dff(
-        .clk(clk),
-        .clear_n(reset_n),
-        .in(reg_mip[`MIP_BIT_EXT_INT_PENDING] & reg_mie[`MIE_BIT_EXT_INT_ENABLED] & reg_mstatus[`MSTATUS_BIT_INTS_ENABLED]),
-        .out(ext_int_pending)
+    /* Write mip Register */
+    wire clear_ext_int = op_is_write_exception & addr_exception_is_trap_ext_int;
+    wire next_ext_int_pending;
+    mux2 next_ext_int_pending_mux(
+        .a(reg_mip[`MIP_BIT_EXT_INT_PENDING]),
+        .b(ext_int | (~clear_ext_int & read_write_value[`MIP_BIT_EXT_INT_PENDING])),
+        .select(ext_int | clear_ext_int | op_is_write_mip),
+        .out(next_ext_int_pending)
     );
-    wire clear_ext_int = ~enable_n & op_is_write_exception & addr_exception_is_trap_ext_int;
-    wire set_ext_int = ~enable_n & op_is_write_mip;
-    wire next_ext_int_pending = ext_int | (set_ext_int & ~clear_ext_int & read_write_value[`MIP_BIT_EXT_INT_PENDING]);
-    dffe reg_ext_int_pending_dffe(
-        .clk(clk),
-        .clear_n(reset_n),
-        .enable_n(~ext_int & ~clear_ext_int & ~set_ext_int),
-        .in(next_ext_int_pending),
-        .out(reg_mip[`MIP_BIT_EXT_INT_PENDING])
+    wire clear_sw_int = op_is_write_exception & addr_exception_is_trap_sw_int;
+    wire next_sw_int_pending;
+    mux2 next_sw_int_pending_mux(
+        .a(reg_mip[`MIP_BIT_SW_INT_PENDING]),
+        .b(~clear_sw_int & read_write_value[`MIP_BIT_SW_INT_PENDING]),
+        .select(clear_sw_int | op_is_write_mip),
+        .out(next_sw_int_pending)
     );
-
-    /* SW Interrupt */
-    dff sw_int_pending_dff(
+    wire update_mip = ext_int | clear_ext_int | clear_sw_int | op_is_write_mip;
+    dffe #(.BITS(32)) reg_mip_dffe(
         .clk(clk),
         .clear_n(reset_n),
-        .in(reg_mip[`MIP_BIT_SW_INT_PENDING] & reg_mie[`MIE_BIT_SW_INT_ENABLED] & reg_mstatus[`MSTATUS_BIT_INTS_ENABLED]),
-        .out(sw_int_pending)
-    );
-    wire clear_sw_int = ~enable_n & op_is_write_exception & reg_mip[`MIP_BIT_SW_INT_PENDING] & addr_exception_is_trap_sw_int;
-    wire set_sw_int = ~enable_n & op_is_write_mip;
-    wire next_sw_int_pending = ~clear_sw_int & read_write_value[`MIP_BIT_SW_INT_PENDING];
-    dffe reg_sw_int_pending_dffe(
-        .clk(clk),
-        .clear_n(reset_n),
-        .enable_n(~clear_sw_int & ~set_sw_int),
-        .in(next_sw_int_pending),
-        .out(reg_mip[`MIP_BIT_SW_INT_PENDING])
+        .enable_n(~enable_n & ~update_mip),
+        .in({20'b0, next_ext_int_pending, 7'b0, next_sw_int_pending, 3'b0}),
+        .out(reg_mip)
     );
 
     /* Write mcause Register */
@@ -312,13 +237,18 @@ module csr #(
         .out(reg_mcause)
     );
 
-    /* Fault */
-    dffe fault_dffe(
+    /* Pending Interrupts */
+    dff ext_int_pending_dff(
         .clk(clk),
         .clear_n(reset_n),
-        .enable_n(enable_n),
-        .in(~op_is_valid_read_write),
-        .out(fault)
+        .in(reg_mip[`MIP_BIT_EXT_INT_PENDING] & reg_mie[`MIE_BIT_EXT_INT_ENABLED] & reg_mstatus[`MSTATUS_BIT_INTS_ENABLED]),
+        .out(ext_int_pending)
+    );
+    dff sw_int_pending_dff(
+        .clk(clk),
+        .clear_n(reset_n),
+        .in(reg_mip[`MIP_BIT_SW_INT_PENDING] & reg_mie[`MIE_BIT_SW_INT_ENABLED] & reg_mstatus[`MSTATUS_BIT_INTS_ENABLED]),
+        .out(sw_int_pending)
     );
 
 `ifdef FORMAL
@@ -332,7 +262,6 @@ module csr #(
     always_ff @(posedge clk) begin
         if (f_past_valid) begin
             if (!$past(reset_n)) begin
-                assert(!fault);
                 assert(!ext_int_pending);
                 assert(!sw_int_pending);
                 assert(reg_mepc == 32'b0);
@@ -364,7 +293,6 @@ module csr #(
                     // Write state
                     case ($past(op))
                         `CSR_OP_EXCEPTION: begin
-                            assert(!fault);
                             assert(reg_mcause[3:0] == $past(addr_exception[3:0]));
                             assert(reg_mcause[`MCAUSE_BIT_IS_INT] == $past(addr_exception[4]));
                             assert(reg_mepc[31:2] == $past(write_value[31:2]));
@@ -378,158 +306,137 @@ module csr #(
                             end
                         end
                         `CSR_OP_MRET: begin
-                            assert(!fault);
                             assert(reg_mstatus[`MSTATUS_BIT_INTS_ENABLED] == $past(temp_reg_ints_enabled));
                             assert(reg_mepc == $past(reg_mepc));
                         end
-                        `CSR_OP_NO_OP: begin
-                            assert(!fault);
-                        end
                         `CSR_OP_CSRRW: begin
-                            case ($past(addr_exception))
-                                12'h300: begin // mstatus
-                                    assert(!fault);
+                            case ($past(addr_exception[2:0]))
+                                `CSR_MAPPED_ADDR_MSTATUS: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mstatus[`MSTATUS_BIT_INTS_ENABLED] == $past(write_value[`MSTATUS_BIT_INTS_ENABLED]));
                                     assert(reg_mstatus[`MSTATUS_BIT_PRIOR_INTS_ENABLED] == $past(write_value[`MSTATUS_BIT_PRIOR_INTS_ENABLED]));
                                 end
-                                12'h304: begin // mie
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MIE: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mie[`MIE_BIT_EXT_INT_ENABLED] == $past(write_value[`MIE_BIT_EXT_INT_ENABLED]));
                                     assert(reg_mie[`MIE_BIT_SW_INT_ENABLED] == $past(write_value[`MIE_BIT_SW_INT_ENABLED]));
                                 end
-                                12'h341: begin // mepc
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MEPC: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mepc[31:2] == $past(write_value[31:2]));
                                 end
-                                12'h342: begin // mcause
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MCAUSE: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mcause[3:0] == $past(write_value[3:0]));
                                 end
-                                12'h344: begin // mip
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MIP: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mip[`MIP_BIT_SW_INT_PENDING] == $past(write_value[`MIP_BIT_SW_INT_PENDING]));
                                 end
-                                default:
-                                    assert(fault);
                             endcase
                         end
                         `CSR_OP_CSRRS: begin
-                            case ($past(addr_exception))
-                                12'h300: begin // mstatus
-                                    assert(!fault);
+                            case ($past(addr_exception[2:0]))
+                                `CSR_MAPPED_ADDR_MSTATUS: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mstatus[`MSTATUS_BIT_INTS_ENABLED] == ($past(reg_mstatus[`MSTATUS_BIT_INTS_ENABLED]) | $past(write_value[`MSTATUS_BIT_INTS_ENABLED])));
                                     assert(reg_mstatus[`MSTATUS_BIT_PRIOR_INTS_ENABLED] == ($past(reg_mstatus[`MSTATUS_BIT_PRIOR_INTS_ENABLED]) | $past(write_value[`MSTATUS_BIT_PRIOR_INTS_ENABLED])));
                                 end
-                                12'h304: begin // mie
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MIE: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mie[`MIE_BIT_EXT_INT_ENABLED] == ($past(reg_mie[`MIE_BIT_EXT_INT_ENABLED]) | $past(write_value[`MIE_BIT_EXT_INT_ENABLED])));
                                     assert(reg_mie[`MIE_BIT_SW_INT_ENABLED] == ($past(reg_mie[`MIE_BIT_SW_INT_ENABLED]) | $past(write_value[`MIE_BIT_SW_INT_ENABLED])));
                                 end
-                                12'h341: begin // mepc
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MEPC: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mepc[31:2] == ($past(reg_mepc[31:2]) | $past(write_value[31:2])));
                                 end
-                                12'h342: begin // mcause
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MCAUSE: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mcause[3:0] == ($past(reg_mcause[3:0]) | $past(write_value[3:0])));
                                 end
-                                12'h344: begin // mip
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MIP: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mip[`MIP_BIT_SW_INT_PENDING] == ($past(reg_mip[`MIP_BIT_SW_INT_PENDING]) | $past(write_value[`MIP_BIT_SW_INT_PENDING])));
                                 end
-                                default:
-                                    assert(fault);
                             endcase
                         end
                         `CSR_OP_CSRRC: begin
-                            case ($past(addr_exception))
-                                12'h300: begin // mstatus
-                                    assert(!fault);
+                            case ($past(addr_exception[2:0]))
+                                `CSR_MAPPED_ADDR_MSTATUS: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mstatus[`MSTATUS_BIT_INTS_ENABLED] == ($past(reg_mstatus[`MSTATUS_BIT_INTS_ENABLED]) & ~$past(write_value[`MSTATUS_BIT_INTS_ENABLED])));
                                     assert(reg_mstatus[`MSTATUS_BIT_PRIOR_INTS_ENABLED] == ($past(reg_mstatus[`MSTATUS_BIT_PRIOR_INTS_ENABLED]) & ~$past(write_value[`MSTATUS_BIT_PRIOR_INTS_ENABLED])));
                                 end
-                                12'h304: begin // mie
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MIE: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mie[`MIE_BIT_EXT_INT_ENABLED] == ($past(reg_mie[`MIE_BIT_EXT_INT_ENABLED]) & ~$past(write_value[`MIE_BIT_EXT_INT_ENABLED])));
                                     assert(reg_mie[`MIE_BIT_SW_INT_ENABLED] == ($past(reg_mie[`MIE_BIT_SW_INT_ENABLED]) & ~$past(write_value[`MIE_BIT_SW_INT_ENABLED])));
                                 end
-                                12'h341: begin // mepc
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MEPC: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mepc[31:2] == ($past(reg_mepc[31:2]) & ~$past(write_value[31:2])));
                                 end
-                                12'h342: begin // mcause
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MCAUSE: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mcause[3:0] == ($past(reg_mcause[3:0]) & ~$past(write_value[3:0])));
                                 end
-                                12'h344: begin // mip
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MIP: begin
+                                    assume($past(addr_exception[3]));
                                     assert(reg_mip[`MIP_BIT_SW_INT_PENDING] == ($past(reg_mip[`MIP_BIT_SW_INT_PENDING]) & ~$past(write_value[`MIP_BIT_SW_INT_PENDING])));
                                 end
-                                default:
-                                    assert(fault);
                             endcase
                         end
-                        default:
-                            assert(fault);
                     endcase
                 end else begin
                     // Read stage
                     case ($past(op))
                         `CSR_OP_EXCEPTION: begin
-                            assert(!fault);
                             assert(read_value[31:2] == IRQ_HANDLER_ADDR[31:2]);
                             assert(temp_reg_ints_enabled == $past(reg_mstatus[`MSTATUS_BIT_INTS_ENABLED]));
                         end
                         `CSR_OP_MRET: begin
-                            assert(!fault);
                             assert(read_value == $past(reg_mepc));
                             assert(temp_reg_ints_enabled == $past(reg_mstatus[`MSTATUS_BIT_PRIOR_INTS_ENABLED]));
                         end
-                        `CSR_OP_NO_OP: begin
-                            assert(!fault);
-                        end
                         `CSR_OP_CSRRW, `CSR_OP_CSRRS, `CSR_OP_CSRRC: begin
-                            case ($past(addr_exception))
-                                12'h300: begin // mstatus
-                                    assert(!fault);
+                            case ($past(addr_exception[2:0]))
+                                `CSR_MAPPED_ADDR_MSTATUS: begin
+                                    assume($past(addr_exception[3]));
                                     // TODO: Figure out why this fails
                                     // assert(read_value[31:8] == 24'b0);
                                     // assert(read_value[6:4] == 3'b0);
                                     // assert(read_value[2:0] == 3'b0);
                                     assert(read_value == $past(reg_mstatus));
                                 end
-                                12'h304: begin // mie
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MIE: begin
+                                    assume($past(addr_exception[3]));
                                     // TODO: Figure out why this fails
                                     // assert(read_value[31:12] == 20'b0);
                                     // assert(read_value[10:4] == 7'b0);
                                     // assert(read_value[2:0] == 3'b0);
                                     assert(read_value == $past(reg_mie));
                                 end
-                                12'h341: begin // mepc
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MEPC: begin
+                                    assume($past(addr_exception[3]));
                                     assert(read_value == $past(reg_mepc));
                                 end
-                                12'h342: begin // mcause
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MCAUSE: begin
+                                    assume($past(addr_exception[3]));
                                     // TODO: Figure out why this fails
                                     // assert(read_value[30:4] == 27'b0);
                                     assert(read_value == $past(reg_mcause));
                                 end
-                                12'h344: begin // mip
-                                    assert(!fault);
+                                `CSR_MAPPED_ADDR_MIP: begin
+                                    assume($past(addr_exception[3]));
                                     // TODO: Figure out why this fails
                                     // assert(read_value[31:12] == 20'b0);
                                     // assert(read_value[10:4] == 7'b0);
                                     // assert(read_value[2:0] == 3'b0);
                                     assert(read_value == $past(reg_mip));
                                 end
-                                default:
-                                    assert(fault);
                             endcase
                         end
-                        default:
-                            assert(fault);
                     endcase
                 end
             end

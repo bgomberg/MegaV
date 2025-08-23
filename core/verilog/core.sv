@@ -30,11 +30,10 @@ module core(
     wire control_op_ext_int = ~control_op[1] & control_op[0];
     wire control_op_sw_int = control_op[1] & ~control_op[0];
     logic [2:0] fault_num /* verilator public */;
-    wire fsm_illegal_instr_fault = decode_fault | csr_fault;
     (* keep *) fsm fsm_module(
         .clk(clk),
         .reset_n(reset_n),
-        .illegal_instr_fault(fsm_illegal_instr_fault),
+        .illegal_instr_fault(decode_fault),
         .mem_fault_num(mem_fault_num),
         .ext_int(csr_ext_int_pending),
         .sw_int(csr_sw_int_pending),
@@ -119,7 +118,7 @@ module core(
     wire [1:0] decode_wb_mux_position /* verilator public */;
     wire [7:0] decode_rd_rf_microcode /* verilator public */;
     wire [8:0] decode_ex_alu_microcode /* verilator public */;
-    wire [14:0] decode_ex_csr_microcode /* verilator public */;
+    wire [6:0] decode_ex_csr_microcode /* verilator public */;
     wire [3:0] decode_ma_mem_microcode /* verilator public */;
     wire [3:0] decode_wb_rf_microcode /* verilator public */;
     wire [1:0] decode_wb_pc_mux_position /* verilator public */;
@@ -258,12 +257,12 @@ module core(
 
     /*
         CSR:
-            [EXECUTE] ex_alu_out = *
-            [MEMORY] pc_offset_pc = pc_pc + decode_imm
+            [EXECUTE] csr_read_value = CSR[csr_addr_exception], internally evaluate interrupts
+            [MEMORY] CSR[csr_addr_exception] = csr_in, internally evaluate interrupts
     */
     wire [2:0] csr_op;
     mux2 #(.BITS(3)) csr_op_mux(
-        .a(3'b011),
+        .a(`CSR_OP_NO_OP),
         .b(decode_ex_csr_microcode[2:0]),
         .select(decode_ex_csr_enabled),
         .out(csr_op)
@@ -275,10 +274,10 @@ module core(
         .select(control_op_trap),
         .out(csr_trap_num)
     );
-    wire [11:0] csr_addr_exception /* verilator public */;
-    mux2 #(.BITS(12)) csr_addr_exception_mux(
-        .a({7'b0, control_op_ext_int | control_op_sw_int, csr_trap_num}),
-        .b(decode_ex_csr_microcode[14:3]),
+    wire [4:0] csr_addr_exception /* verilator public */;
+    mux2 #(.BITS(5)) csr_addr_exception_mux(
+        .a({control_op_ext_int | control_op_sw_int, csr_trap_num}),
+        .b({1'b0, decode_ex_csr_microcode[6:3]}),
         .select(control_op_normal),
         .out(csr_addr_exception)
     );
@@ -299,24 +298,22 @@ module core(
         .out(csr_in)
     );
     wire [31:0] csr_read_value /* verilator public */;
-    wire csr_fault;
     wire csr_ext_int_pending;
     wire csr_sw_int_pending;
-    wire csr_enable_n = stage_active_n[`STAGE_EXECUTE] & stage_active_n[`STAGE_MEMORY];
-    wire csr_is_write_stage = ~stage_active_n[`STAGE_MEMORY] & decode_ex_csr_enabled;
+    wire csr_write_stage_enable_n = stage_active_n[`STAGE_MEMORY] | ~decode_ex_csr_enabled;
+    wire csr_enable_n = stage_active_n[`STAGE_EXECUTE] & csr_write_stage_enable_n;
     (* keep *) csr csr_module(
         .clk(clk),
         .reset_n(reset_n),
         .enable_n(csr_enable_n),
-        .is_write_stage(csr_is_write_stage),
+        .is_write_stage(~csr_write_stage_enable_n),
         .ext_int(ext_int),
         .op(csr_op),
         .addr_exception(csr_addr_exception),
         .write_value(csr_in),
         .read_value(csr_read_value),
         .ext_int_pending(csr_ext_int_pending),
-        .sw_int_pending(csr_sw_int_pending),
-        .fault(csr_fault)
+        .sw_int_pending(csr_sw_int_pending)
     );
 
 endmodule

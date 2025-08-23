@@ -9,16 +9,14 @@ smtbmc yices
 --pycode-begin--
 early_log(workdir, "Verifying module: {}".format(taskname))
 cells = (
-    "and2",
-    "and4",
+    "and2", "and4",
     "demux4",
     "dff", "dffe",
     "mux2", "mux4", "mux8",
-    "nand8",
+    "nand3", "nand4", "nand8",
     "nor2", "nor4",
     "or2", "or4",
-    "xor2",
-    "xor3"
+    "xor2", "xor3"
 )
 if taskname in cells:
     output("read -formal -sv cells/{}.sv".format(taskname))
@@ -38,6 +36,8 @@ adder32
 shifter
 and2
 and4
+nand3
+nand4
 nand8
 mux2
 mux4
@@ -66,6 +66,7 @@ verilog/shifter.sv
 verilog/csr.sv
 verilog/fsm.sv
 constants/alu_microcode.sv verilog/constants/alu_microcode.sv
+constants/csr_mapped_addr.sv verilog/constants/csr_mapped_addr.sv
 constants/csr_op.sv verilog/constants/csr_op.sv
 constants/fsm_control_op.sv verilog/constants/fsm_control_op.sv
 constants/fsm_fault_num.sv verilog/constants/fsm_fault_num.sv
@@ -74,6 +75,8 @@ constants/mem_op_size.sv verilog/constants/mem_op_size.sv
 constants/stages.sv verilog/constants/stages.sv
 cells/and2.sv verilog/cells/and2.sv
 cells/and4.sv verilog/cells/and4.sv
+cells/nand3.sv verilog/cells/nand3.sv
+cells/nand4.sv verilog/cells/nand4.sv
 cells/nand8.sv verilog/cells/nand8.sv
 cells/or2.sv verilog/cells/or2.sv
 cells/or4.sv verilog/cells/or4.sv

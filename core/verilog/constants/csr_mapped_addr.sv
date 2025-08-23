@@ -1,0 +1,10 @@
+`ifndef __CSR_MAPPED_ADDR_SV__
+`define __CSR_MAPPED_ADDR_SV__
+
+`define CSR_MAPPED_ADDR_MSTATUS 3'b000
+`define CSR_MAPPED_ADDR_MIE     3'b011
+`define CSR_MAPPED_ADDR_MEPC    3'b101
+`define CSR_MAPPED_ADDR_MCAUSE  3'b110
+`define CSR_MAPPED_ADDR_MIP     3'b111
+
+`endif
