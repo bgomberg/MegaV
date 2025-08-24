@@ -34,50 +34,36 @@ module fsm(
         .out(in_progress)
     );
 
-    /* Control Op */
-    wire fault_value;
-    mux2 fault_value_mux(
-        .a(fault),
-        .b(active_fault),
-        .select(in_progress),
-        .out(fault_value)
-    );
-    wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
-    // TODO: There are some weird bugs that get exposed if this signal is simplified or non-public
-    wire update_control_op /* verilator public */ = ~reset_n | (in_progress & (~next_stage_n[`STAGE_CONTROL] | active_fault));
-    dffe #(.BITS($bits(control_op))) control_op_dffe(
-        .clk(clk),
-        .clear_n(reset_n),
-        .enable_n(~update_control_op),
-        .in(control_op_value),
-        .out(control_op)
-    );
-
-    /* Fault / Fault Number */
-    logic fault;
+    /* Fault Number */
     wire mem_fault = mem_fault_num[2];
     wire fetch_stage_mem_fault = mem_fault & ~stage_active_n[`STAGE_FETCH];
     wire mem_stage_mem_fault = mem_fault & ~stage_active_n[`STAGE_MEMORY];
     wire non_control_stage_instr_fault = stage_active_n[`STAGE_CONTROL] & illegal_instr_fault;
-    wire active_fault = in_progress & (fetch_stage_mem_fault | mem_stage_mem_fault | non_control_stage_instr_fault);
+    wire active_fault = fetch_stage_mem_fault | mem_stage_mem_fault | non_control_stage_instr_fault;
     wire [2:0] next_fault_num = {
         mem_stage_mem_fault & ~non_control_stage_instr_fault,
         (mem_stage_mem_fault & mem_fault_num[1]) | non_control_stage_instr_fault,
         ~non_control_stage_instr_fault & mem_fault_num[0]
     };
-    dffe fault_dff(
-        .clk(clk),
-        .clear_n(reset_n),
-        .enable_n(~in_progress),
-        .in(active_fault),
-        .out(fault)
-    );
     dffe #(.BITS($bits(fault_num))) fault_num_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(~active_fault),
         .in(next_fault_num),
         .out(fault_num)
+    );
+
+    /* Control Op */
+    wire [1:0] control_op_value = {~active_fault & ~ext_int, ~active_fault & (ext_int | ~sw_int)};
+    wire next_stage_is_control = ~next_stage_n[`STAGE_CONTROL] | active_fault;
+    // TODO: There are some weird bugs that get exposed if this signal is simplified or non-public
+    wire update_control_op_n /* verilator public */ = reset_n & ~(in_progress & next_stage_is_control);
+    dffe #(.BITS($bits(control_op))) control_op_dffe(
+        .clk(clk),
+        .clear_n(reset_n),
+        .enable_n(update_control_op_n),
+        .in(control_op_value),
+        .out(control_op)
     );
 
     /* Active Stage */
@@ -112,7 +98,7 @@ module fsm(
             // Only one bit in stage_active should ever be set
             assume($past(stage_active & (stage_active - 1)) == 0);
             if ($past(~reset_n)) begin
-                assert(stage_active == 1 << 0);
+                assert(stage_active == `DEFAULT_STAGE_ACTIVE);
             end else if ($past(stage_active) != $past(stage_active, 2) || $past(~reset_n, 2)) begin
                 // need to stay in each stage for at least 2 clock cycles
                 assert(stage_active == $past(stage_active));

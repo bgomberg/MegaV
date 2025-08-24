@@ -79,22 +79,24 @@ module memory(
     );
 
     /* Fault */
-    wire [2:0] next_fault_num_intermediate = {
+    wire [2:0] next_fault_num = {
         misaligned_fault | next_access_fault,
         microcode.is_write,
         ~misaligned_fault & next_access_fault
     };
-    wire [2:0] next_fault_num;
-    and2 #(.BITS($bits(next_fault_num))) next_fault_num_and(
-        .a(next_fault_num_intermediate),
-        .b({3{~enable_n}}),
-        .out(next_fault_num)
-    );
-    // TODO: Can we use dffe here instead?
-    dff #(.BITS($bits(fault_num))) fault_num_dff(
+    logic [2:0] temp_fault_num;
+    dffe #(.BITS($bits(fault_num))) fault_num_dff(
         .clk(clk),
         .clear_n(reset_n),
+        .enable_n(enable_n),
         .in(next_fault_num),
+        .out(temp_fault_num)
+    );
+    // Need to output a fault number of 000 when not enabled
+    mux2 #(.BITS($bits(fault_num))) fault_num_mux(
+        .a(temp_fault_num),
+        .b(3'b000),
+        .select(enable_n),
         .out(fault_num)
     );
 
