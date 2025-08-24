@@ -27,7 +27,8 @@ VERILATOR_ARGS := \
 	-Wall \
 	--prefix $(VERILATOR_MODULE_NAME) \
 	-Iverilog \
-	-Iverilog/cells
+	-Iverilog/cells \
+	-Iverilog/include
 
 COMPLIANCE_SRC_DIR := sim/compliance/src
 COMPLIANCE_SRCS := $(wildcard $(COMPLIANCE_SRC_DIR)/*)

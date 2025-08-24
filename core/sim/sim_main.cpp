@@ -119,13 +119,13 @@ public:
         break;
       case STAGE_DECODE:
         printf("    imm: 0x%x\n", (*this)->decode_imm);
-        printf("    alu_a_mux_position: 0x%x\n", (*this)->decode_alu_a_mux_position);
-        printf("    alu_b_mux_position: 0x%x\n", (*this)->decode_alu_b_mux_position);
-        printf("    csr_mux_position: 0x%x\n", (*this)->decode_csr_mux_position);
-        printf("    wb_pc_mux_position: 0x%x\n", (*this)->decode_wb_pc_mux_position);
-        printf("    wb_mux_position: 0x%x\n", (*this)->decode_wb_mux_position);
+        printf("    mux_position.alu_in_a: 0x%x\n", ((*this)->decode_mux_position >> 7) & 0x1);
+        printf("    mux_position.alu_in_b: 0x%x\n", ((*this)->decode_mux_position >> 6) & 0x1);
+        printf("    mux_position.csr_in: 0x%x\n", ((*this)->decode_mux_position >> 4) & 0x3);
+        printf("    mux_position.wb_rf_in: 0x%x\n", ((*this)->decode_mux_position >> 2) & 0x3);
+        printf("    mux_position.wb_pc: 0x%x\n", ((*this)->decode_mux_position >> 0) & 0x3);
         printf("    rd_rf_microcode: 0x%x\n", (*this)->decode_rd_rf_microcode);
-        printf("    ex_alu_enabled: %d\n", (*this)->decode_ex_alu_enabled);
+        printf("    ex_alu_enabled: %d\n", ((*this)->decode_ex_alu_microcode >> 10) & 0x1);
         printf("    ex_alu_microcode: 0x%x\n", (*this)->decode_ex_alu_microcode);
         printf("    ex_csr_microcode: 0x%x\n", (*this)->decode_ex_csr_microcode);
         printf("    ma_mem_microcode: 0x%x\n", (*this)->decode_ma_mem_microcode);

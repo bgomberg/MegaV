@@ -14,13 +14,13 @@ module adder4(
 );
 
     wire [3:0] prop;
-    xor2 #(.BITS(4)) prop_xor(
+    xor2 #(.BITS($bits(prop))) prop_xor(
         .a(a),
         .b(b),
         .out(prop)
     );
     wire [3:0] gen;
-    and2 #(.BITS(4)) gen_and(
+    and2 #(.BITS($bits(gen))) gen_and(
         .a(a),
         .b(b),
         .out(gen)
@@ -37,7 +37,7 @@ module adder4(
         .out(carry_out)
     );
 
-    xor2 #(.BITS(4)) sum_xor(
+    xor2 #(.BITS($bits(sum))) sum_xor(
         .a(prop),
         .b({carry_2, carry_1, carry_0, carry_in}),
         .out(sum)

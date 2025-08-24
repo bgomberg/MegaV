@@ -3,9 +3,9 @@
 `include "cells/dffe.sv"
 `include "cells/mux2.sv"
 `include "cells/mux4.sv"
-`include "constants/fsm_control_op.sv"
-`include "constants/fsm_fault_num.sv"
-`include "constants/stages.sv"
+`include "include/fsm_control_op.sv"
+`include "include/stages.sv"
+`include "include/types.sv"
 
 /*
  * FSM.
@@ -45,7 +45,7 @@ module fsm(
     wire [1:0] control_op_value = {~fault_value & ~ext_int, ~fault_value & (ext_int | ~sw_int)};
     // TODO: There are some weird bugs that get exposed if this signal is simplified or non-public
     wire update_control_op /* verilator public */ = ~reset_n | (in_progress & (~next_stage_n[`STAGE_CONTROL] | active_fault));
-    dffe #(.BITS(2)) control_op_dffe(
+    dffe #(.BITS($bits(control_op))) control_op_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(~update_control_op),
@@ -72,7 +72,7 @@ module fsm(
         .in(active_fault),
         .out(fault)
     );
-    dffe #(.BITS(3)) fault_num_dffe(
+    dffe #(.BITS($bits(fault_num))) fault_num_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(~active_fault),
@@ -120,25 +120,25 @@ module fsm(
                 assert(stage_active == (1 << 0) || stage_active != $past(stage_active));
                 if ($past(illegal_instr_fault) && !$past(stage_active[`STAGE_CONTROL])) begin
                     assert(stage_active == (1 << 0));
-                    assert(fault_num == `FSM_FAULT_NUM_ILLEGAL_INSTR);
+                    assert(fault_num == FAULT_NUM_ILLEGAL_INSTR);
                 end else if ($past(mem_fault_num[2] & ~mem_fault_num[0]) && $past(stage_active[`STAGE_FETCH])) begin
                     assert(stage_active == (1 << 0));
-                    assert(fault_num == `FSM_FAULT_NUM_INSTR_ADDR_MISALIGNED);
+                    assert(fault_num == FAULT_NUM_INSTR_ADDR_MISALIGNED);
                 end else if ($past(mem_fault_num[2] & ~mem_fault_num[0]) && $past(stage_active[`STAGE_MEMORY])) begin
                     assert(stage_active == (1 << 0));
                     if ($past(mem_fault_num[1])) begin
-                        assert(fault_num == `FSM_FAULT_NUM_STORE_ADDR_MISALIGNED);
+                        assert(fault_num == FAULT_NUM_STORE_ADDR_MISALIGNED);
                     end else begin
-                        assert(fault_num == `FSM_FAULT_NUM_LOAD_ADDR_MISALIGNED);
+                        assert(fault_num == FAULT_NUM_LOAD_ADDR_MISALIGNED);
                     end
                 end else if ($past(mem_fault_num[2] & mem_fault_num[0]) && $past(stage_active[`STAGE_FETCH])) begin
-                    assert(fault_num == `FSM_FAULT_NUM_INSTR_ACCESS_FAULT);
+                    assert(fault_num == FAULT_NUM_INSTR_ACCESS_FAULT);
                 end else if ($past(mem_fault_num[2] & mem_fault_num[0]) && $past(stage_active[`STAGE_MEMORY])) begin
                     assert(stage_active == (1 << 0));
                     if ($past(mem_fault_num[1])) begin
-                        assert(fault_num == `FSM_FAULT_NUM_STORE_ACCESS_FAULT);
+                        assert(fault_num == FAULT_NUM_STORE_ACCESS_FAULT);
                     end else begin
-                        assert(fault_num == `FSM_FAULT_NUM_LOAD_ACCESS_FAULT);
+                        assert(fault_num == FAULT_NUM_LOAD_ACCESS_FAULT);
                     end
                 end else begin
                     // Stage was completed without a fault

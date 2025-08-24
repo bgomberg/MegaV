@@ -67,21 +67,21 @@ module register_file(
         .out3_n(write_addr_is_r2_n),
         .out4_n(write_addr_is_r3_n)
     );
-    dffe #(.BITS(32)) r1_dffe(
+    dffe #(.BITS($bits(r1))) r1_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r1_n),
         .in(write_data),
         .out(r1)
     );
-    dffe #(.BITS(32)) r2_dffe(
+    dffe #(.BITS($bits(r2))) r2_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r2_n),
         .in(write_data),
         .out(r2)
     );
-    dffe #(.BITS(32)) r3_dffe(
+    dffe #(.BITS($bits(r3))) r3_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r3_n),
@@ -103,28 +103,28 @@ module register_file(
         .out3_n(write_addr_is_r6_n),
         .out4_n(write_addr_is_r7_n)
     );
-    dffe #(.BITS(32)) r4_dffe(
+    dffe #(.BITS($bits(r4))) r4_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r4_n),
         .in(write_data),
         .out(r4)
     );
-    dffe #(.BITS(32)) r5_dffe(
+    dffe #(.BITS($bits(r5))) r5_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r5_n),
         .in(write_data),
         .out(r5)
     );
-    dffe #(.BITS(32)) r6_dffe(
+    dffe #(.BITS($bits(r6))) r6_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r6_n),
         .in(write_data),
         .out(r6)
     );
-    dffe #(.BITS(32)) r7_dffe(
+    dffe #(.BITS($bits(r7))) r7_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r7_n),
@@ -146,28 +146,28 @@ module register_file(
         .out3_n(write_addr_is_r10_n),
         .out4_n(write_addr_is_r11_n)
     );
-    dffe #(.BITS(32)) r8_dffe(
+    dffe #(.BITS($bits(r8))) r8_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r8_n),
         .in(write_data),
         .out(r8)
     );
-    dffe #(.BITS(32)) r9_dffe(
+    dffe #(.BITS($bits(r9))) r9_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r9_n),
         .in(write_data),
         .out(r9)
     );
-    dffe #(.BITS(32)) r10_dffe(
+    dffe #(.BITS($bits(r10))) r10_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r10_n),
         .in(write_data),
         .out(r10)
     );
-    dffe #(.BITS(32)) r11_dffe(
+    dffe #(.BITS($bits(r11))) r11_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r11_n),
@@ -189,28 +189,28 @@ module register_file(
         .out3_n(write_addr_is_r14_n),
         .out4_n(write_addr_is_r15_n)
     );
-    dffe #(.BITS(32)) r12_dffe(
+    dffe #(.BITS($bits(r12))) r12_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r12_n),
         .in(write_data),
         .out(r12)
     );
-    dffe #(.BITS(32)) r13_dffe(
+    dffe #(.BITS($bits(r13))) r13_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r13_n),
         .in(write_data),
         .out(r13)
     );
-    dffe #(.BITS(32)) r14_dffe(
+    dffe #(.BITS($bits(r14))) r14_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r14_n),
         .in(write_data),
         .out(r14)
     );
-    dffe #(.BITS(32)) r15_dffe(
+    dffe #(.BITS($bits(r15))) r15_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(write_addr_is_r15_n),
@@ -220,7 +220,7 @@ module register_file(
 
     /* Read A */
     wire [31:0] read_data_a_lower_addr;
-    mux8 #(.BITS(32)) read_data_a_lower_addr_mux(
+    mux8 #(.BITS($bits(read_data_a_lower_addr))) read_data_a_lower_addr_mux(
         .d1(32'b0),
         .d2(r1),
         .d3(r2),
@@ -233,7 +233,7 @@ module register_file(
         .out(read_data_a_lower_addr)
     );
     wire [31:0] read_data_a_upper_addr;
-    mux8 #(.BITS(32)) read_data_a_upper_addr_mux(
+    mux8 #(.BITS($bits(read_data_a_upper_addr))) read_data_a_upper_addr_mux(
         .d1(r8),
         .d2(r9),
         .d3(r10),
@@ -246,13 +246,13 @@ module register_file(
         .out(read_data_a_upper_addr)
     );
     wire [31:0] next_read_data_a;
-    mux2 #(.BITS(32)) read_data_a_mux(
+    mux2 #(.BITS($bits(next_read_data_a))) read_data_a_mux(
         .a(read_data_a_lower_addr),
         .b(read_data_a_upper_addr),
         .select(read_addr_a[3]),
         .out(next_read_data_a)
     );
-    dffe #(.BITS(32)) read_data_a_dffe(
+    dffe #(.BITS($bits(read_data_a))) read_data_a_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(read_en_n),
@@ -262,7 +262,7 @@ module register_file(
 
     /* Read B */
     wire [31:0] read_data_b_lower_addr;
-    mux8 #(.BITS(32)) read_data_b_lower_addr_mux(
+    mux8 #(.BITS($bits(read_data_b_lower_addr))) read_data_b_lower_addr_mux(
         .d1(32'b0),
         .d2(r1),
         .d3(r2),
@@ -275,7 +275,7 @@ module register_file(
         .out(read_data_b_lower_addr)
     );
     wire [31:0] read_data_b_upper_addr;
-    mux8 #(.BITS(32)) read_data_b_upper_addr_mux(
+    mux8 #(.BITS($bits(read_data_b_upper_addr))) read_data_b_upper_addr_mux(
         .d1(r8),
         .d2(r9),
         .d3(r10),
@@ -288,13 +288,13 @@ module register_file(
         .out(read_data_b_upper_addr)
     );
     wire [31:0] next_read_data_b;
-    mux2 #(.BITS(32)) read_data_b_mux(
+    mux2 #(.BITS($bits(next_read_data_b))) read_data_b_mux(
         .a(read_data_b_lower_addr),
         .b(read_data_b_upper_addr),
         .select(read_addr_b[3]),
         .out(next_read_data_b)
     );
-    dffe #(.BITS(32)) read_data_b_dffe(
+    dffe #(.BITS($bits(read_data_b))) read_data_b_dffe(
         .clk(clk),
         .clear_n(reset_n),
         .enable_n(read_en_n),

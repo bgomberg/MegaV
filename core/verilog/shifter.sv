@@ -2,6 +2,7 @@
 `define __SHIFTER_SV__
 
 `include "cells/mux2.sv"
+`include "include/types.sv"
 
 function [31:0] reverse_bit_order(input [31:0] data);
 integer i;
@@ -18,7 +19,7 @@ endfunction
 module shifter(
     input [31:0] in, // Input
     input [4:0] amount, // Amount
-    input [1:0] op, // Operation (00=SLL, 01=SRL, 11=SRA)
+    input shifter_op_t op, // Operation
     output [31:0] out // Result
 );
 
@@ -27,48 +28,48 @@ module shifter(
 
     wire shift_in_bit = is_right_arithmetic & in[31];
     wire [31:0] shift_in;
-    mux2 #(.BITS(32)) shift_in_mux(
+    mux2 #(.BITS($bits(shift_in))) shift_in_mux(
         .a(in),
         .b(reverse_bit_order(in)),
         .select(is_right),
         .out(shift_in)
     );
     wire [31:0] shift_int_1;
-    mux2 #(.BITS(32)) shift_int_1_mux(
+    mux2 #(.BITS($bits(shift_int_1))) shift_int_1_mux(
         .a(shift_in),
         .b({shift_in[15:0], {16{shift_in_bit}}}),
         .select(amount[4]),
         .out(shift_int_1)
     );
     wire [31:0] shift_int_2;
-    mux2 #(.BITS(32)) shift_int_2_mux(
+    mux2 #(.BITS($bits(shift_int_2))) shift_int_2_mux(
         .a(shift_int_1),
         .b({shift_int_1[23:0], {8{shift_in_bit}}}),
         .select(amount[3]),
         .out(shift_int_2)
     );
     wire [31:0] shift_int_3;
-    mux2 #(.BITS(32)) shift_int_3_mux(
+    mux2 #(.BITS($bits(shift_int_3))) shift_int_3_mux(
         .a(shift_int_2),
         .b({shift_int_2[27:0], {4{shift_in_bit}}}),
         .select(amount[2]),
         .out(shift_int_3)
     );
     wire [31:0] shift_int_4;
-    mux2 #(.BITS(32)) shift_int_4_mux(
+    mux2 #(.BITS($bits(shift_int_4))) shift_int_4_mux(
         .a(shift_int_3),
         .b({shift_int_3[29:0], {2{shift_in_bit}}}),
         .select(amount[1]),
         .out(shift_int_4)
     );
     wire [31:0] shift_int_5;
-    mux2 #(.BITS(32)) shift_int_5_mux(
+    mux2 #(.BITS($bits(shift_int_5))) shift_int_5_mux(
         .a(shift_int_4),
         .b({shift_int_4[30:0], shift_in_bit}),
         .select(amount[0]),
         .out(shift_int_5)
     );
-    mux2 #(.BITS(32)) out_mux(
+    mux2 #(.BITS($bits(out))) out_mux(
         .a(shift_int_5),
         .b(reverse_bit_order(shift_int_5)),
         .select(is_right),
@@ -78,12 +79,11 @@ module shifter(
 `ifdef FORMAL
     /* Validate logic */
     always_comb begin
-        if (op == 2'b11) begin
+        if (op == SHIFTER_OP_SRA) begin
             assert($signed(out) == ($signed(in) >>> amount));
-        end else if (op[0]) begin
+        end else if (op == SHIFTER_OP_SRL) begin
             assert(out == (in >> amount));
-        end else begin
-            assume(!op[1]);
+        end else if (op ==  SHIFTER_OP_SLL) begin
             assert(out == (in << amount));
         end
     end

@@ -14,7 +14,7 @@ import "DPI-C" function int mem_get_read_result_dpi_c(
 `endif
 
 function bit mem_get_access_fault(
-    input bit[31:0] addr,
+    input bit [31:0] addr,
     input bit is_write
 );
 `ifdef verilator
@@ -25,11 +25,11 @@ function bit mem_get_access_fault(
     mem_get_access_fault = 3'b0;
 `endif
 endfunction
-function bit[31:0] mem_get_read_result(
+function bit [31:0] mem_get_read_result(
     input bit enable,
-    input bit[31:0] addr,
-    input bit[31:0] write_val,
-    input bit[1:0] op_size,
+    input bit [31:0] addr,
+    input bit [31:0] write_val,
+    input bit [1:0] op_size,
     input bit is_write
 );
 `ifdef verilator
