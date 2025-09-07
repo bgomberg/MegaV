@@ -1,0 +1,5 @@
+*/*-backups/
+fp-info-cache
+fp-lib-table
+fabrication-toolkit-options.json
+*.kicad_prl
